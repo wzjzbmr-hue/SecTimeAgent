@@ -1,6 +1,6 @@
 # SecTimeAgent
 
-面向 **2026 年能源行业人工智能应用大赛（赛道三：网络安全智能体攻防）** 的全自主攻防智能体框架（基于 [oritera/Cairn](https://github.com/oritera/Cairn) 深度加固与重构），针对 **Ubuntu 24.04（8 核 / 16 GB RAM / 50 GB 磁盘）**、**4 小时全自动无人值守**、**一题多 Flag**、**国产大模型白名单网关** 与 **T+N 公开对话零泄密** 场景设计。
+基于 [oritera/Cairn](https://github.com/oritera/Cairn) 深度加固与重构），针对 **Ubuntu 24.04（8 核 / 16 GB RAM / 50 GB 磁盘）**、**4 小时全自动无人值守**、**一题多 Flag**、**国产大模型白名单网关** 与 **T+N 公开对话零泄密** 场景设计。
 
 ---
 
