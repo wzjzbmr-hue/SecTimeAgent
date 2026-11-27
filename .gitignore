@@ -1,7 +1,9 @@
 # Personal configuration and runtime state
 config/dispatch.yaml
+config/proxy.yaml
 dispatch.yaml
 .env
+.env.*
 .venv/
 **/.venv/
 __pycache__/

@@ -155,6 +155,12 @@ class ContainerConfig(BaseModel):
     network_mode: str
     completed_action: CompletedAction
     cap_add: list[str] = Field(default_factory=list)
+    init: bool = True
+    mem_limit: str | None = None
+    cpu_limit: float | None = Field(default=None, gt=0)
+    pids_limit: int | None = Field(default=None, gt=0)
+    stdout_max_bytes: int = Field(default=8 * 1024 * 1024, gt=0)
+    archive_dir: str | None = None
 
 
 class LocalConfig(BaseModel):
@@ -171,6 +177,11 @@ class RuntimeConfig(BaseModel):
     worker_healthcheck: WorkerHealthcheckMode = "startup_only"
     execution: ExecutionMode = "container"
     prompt_group: str = Field(min_length=1)
+    project_max_duration: int | None = Field(default=None, gt=0)
+    max_intent_failures: int = Field(default=3, gt=0)
+    failure_backoff_base: int = Field(default=5, gt=0)
+    unhealthy_retry_after: int = Field(default=60, gt=0)
+    cleanup_orphans: bool = True
 
 
 class WorkerConfig(BaseModel):
@@ -208,6 +219,7 @@ class DispatchConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     server: str
+    admin_token: str | None = None
     runtime: RuntimeConfig
     tasks: TasksConfig
     container: ContainerConfig | None = None

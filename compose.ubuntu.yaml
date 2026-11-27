@@ -12,10 +12,13 @@ services:
     <<: *runtime
     container_name: cairn-ubuntu-server
     command: [/cairn/.venv/bin/cairn, serve, --host, 0.0.0.0, --no-access-log]
+    environment:
+      TZ: Asia/Shanghai
+      CAIRN_ADMIN_TOKEN: ${CAIRN_ADMIN_TOKEN:-}
     volumes:
       - ./runtime/cairn:/root/.local/share/cairn
     healthcheck:
-      test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/projects', timeout=3)"]
+      test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 5s
       timeout: 4s
       retries: 12
@@ -24,8 +27,18 @@ services:
     <<: *runtime
     container_name: cairn-ubuntu-proxy
     command: [/cairn/.venv/bin/python, /workspace/bench/token_proxy.py, --host, 127.0.0.1, --port, '8100', --route, 'glm=https://open.bigmodel.cn/api/anthropic', --route, 'ds=https://api.deepseek.com/anthropic']
+    environment:
+      TZ: Asia/Shanghai
+      PROXY_CONFIG: ${PROXY_CONFIG:-/config/proxy.yaml}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      QWEN_TOKEN_PLAN_API_KEY: ${QWEN_TOKEN_PLAN_API_KEY:-}
+      ALI_DASHSCOPE_API_KEY: ${ALI_DASHSCOPE_API_KEY:-}
+      GLM_CODING_API_KEY: ${GLM_CODING_API_KEY:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     volumes:
       - ./bench:/workspace/bench:ro
+      - ./config:/config:ro
       - ./runtime/bench-results:/workspace/bench/results
     healthcheck:
       test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]

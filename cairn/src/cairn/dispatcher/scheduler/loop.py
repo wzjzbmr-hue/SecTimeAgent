@@ -44,7 +44,7 @@ class DispatcherLoop:
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self.config = DispatchConfig.load(config_path)
-        self.client = CairnClient(self.config.server)
+        self.client = CairnClient(self.config.server, admin_token=self.config.admin_token)
         if self.config.runtime.execution == "local":
             self.container_manager = LocalBackend(self.config.local or LocalConfig())
         else:
@@ -58,6 +58,10 @@ class DispatcherLoop:
         self.runtime_project_ids: set[str] = set()
         self.worker_unhealthy_until: dict[str, float] = {}
         self.worker_rejected_until: dict[tuple[str, str, str], float] = {}
+        self.intent_failure_counts: dict[tuple[str, str], int] = {}
+        self.intent_backoff_until: dict[tuple[str, str], float] = {}
+        self.project_started_at: dict[str, float] = {}
+        self._last_orphan_cleanup: float = 0.0
         self._log_state: dict[str, tuple[int, str, tuple[object, ...]]] = {}
         self._cleanup_pending: set[str] = set()
         self._inactive_cleanup_done: dict[str, str] = {}
@@ -90,14 +94,26 @@ class DispatcherLoop:
                     summaries = self.client.list_projects()
                     self._initialize_reason_checkpoints(summaries)
                     self._refresh_runtime_projects(summaries)
+                    self._enforce_project_budgets(summaries)
                     self._cancel_inactive_tasks(summaries)
                     self._queue_container_cleanups(summaries)
+                    self._cleanup_orphan_containers(summaries)
                     self._dispatch_available(summaries)
                 except requests.RequestException as exc:
                     if once:
                         raise
                     LOG.warning(
                         "dispatcher server request failed error=%s retry_in=%ss",
+                        exc,
+                        self.config.runtime.interval,
+                    )
+                    time.sleep(self.config.runtime.interval)
+                    continue
+                except Exception as exc:
+                    if once:
+                        raise
+                    LOG.exception(
+                        "dispatcher tick error=%s retry_in=%ss",
                         exc,
                         self.config.runtime.interval,
                     )
@@ -296,6 +312,8 @@ class DispatcherLoop:
                 export_yaml = self.client.export_project(summary.id)
                 return self._dispatch_reason(project, export_yaml, reason_trigger)
         running_intent_ids = self._project_running_explore_intents(summary.id)
+        backoff_until = getattr(self, "intent_backoff_until", {})
+        now = time.time()
         unclaimed_intents = [
             intent
             for intent in project.intents
@@ -303,6 +321,7 @@ class DispatcherLoop:
             and intent.worker is None
             and intent.id not in running_intent_ids
             and not self._is_bootstrap_intent(intent)
+            and backoff_until.get((summary.id, intent.id), 0.0) <= now
         ]
         if running_intent_ids and not unclaimed_intents:
             self._log_changed(
@@ -741,7 +760,8 @@ class DispatcherLoop:
                     )
                 self._clear_project_log_state(task.project_id)
                 if outcome == "unhealthy":
-                    retry_after_seconds = UNHEALTHY_RETRY_AFTER_SECONDS
+                    cfg_runtime = getattr(getattr(self, "config", None), "runtime", None)
+                    retry_after_seconds = getattr(cfg_runtime, "unhealthy_retry_after", UNHEALTHY_RETRY_AFTER_SECONDS)
                     self.worker_unhealthy_until[task.worker_name] = time.time() + retry_after_seconds
                     LOG.info(
                         "worker marked unhealthy worker=%s retry_after=%.0fs",
@@ -750,6 +770,7 @@ class DispatcherLoop:
                     )
                 else:
                     self.worker_unhealthy_until.pop(task.worker_name, None)
+                self._record_intent_outcome(task, outcome)
                 rejection_key = (task.project_id, task.task_type, task.worker_name)
                 if outcome == "rejected":
                     retry_after_seconds = REJECTED_RETRY_AFTER_SECONDS
@@ -929,8 +950,136 @@ class DispatcherLoop:
                 interval,
             )
 
+    def _record_intent_outcome(self, task: RunningTask, outcome: str) -> None:
+        if task.intent_id is None or task.task_type not in ("explore", "bootstrap"):
+            return
+        counts = getattr(self, "intent_failure_counts", None)
+        backoffs = getattr(self, "intent_backoff_until", None)
+        if counts is None or backoffs is None:
+            return
+        key = (task.project_id, task.intent_id)
+        if outcome == "success":
+            counts.pop(key, None)
+            backoffs.pop(key, None)
+            return
+        if outcome != "failed":
+            return
+        cfg_runtime = getattr(getattr(self, "config", None), "runtime", None)
+        max_failures = getattr(cfg_runtime, "max_intent_failures", 3)
+        base_backoff = getattr(cfg_runtime, "failure_backoff_base", 5)
+        new_count = counts.get(key, 0) + 1
+        counts[key] = new_count
+        delay = min(120, base_backoff * (2 ** (new_count - 1)))
+        backoffs[key] = time.time() + delay
+        LOG.warning(
+            "intent failure recorded project=%s intent=%s task=%s count=%s/%s backoff=%ss",
+            task.project_id,
+            task.intent_id,
+            task.task_type,
+            new_count,
+            max_failures,
+            delay,
+        )
+        if new_count >= max_failures:
+            self._trip_intent_circuit_breaker(task.project_id, task.intent_id, task.worker_name, new_count)
+
+    def _trip_intent_circuit_breaker(
+        self, project_id: str, intent_id: str, worker_name: str, failure_count: int
+    ) -> None:
+        client = getattr(self, "client", None)
+        if client is None:
+            return
+        note = (
+            f"[CIRCUIT_BREAKER] Intent {intent_id} failed {failure_count} times consecutively "
+            "and was automatically concluded to prevent an infinite retry loop. Pivot to another approach."
+        )
+        claim = client.heartbeat(project_id, intent_id, worker_name)
+        if not claim.ok:
+            LOG.warning(
+                "circuit breaker claim failed project=%s intent=%s status=%s",
+                project_id,
+                intent_id,
+                claim.status_code,
+            )
+            return
+        res = client.conclude(project_id, intent_id, worker_name, note)
+        if res.ok:
+            LOG.warning("circuit breaker concluded intent project=%s intent=%s failures=%s", project_id, intent_id, failure_count)
+            self.intent_failure_counts.pop((project_id, intent_id), None)
+            self.intent_backoff_until.pop((project_id, intent_id), None)
+        else:
+            LOG.warning(
+                "circuit breaker conclude failed project=%s intent=%s status=%s",
+                project_id,
+                intent_id,
+                res.status_code,
+            )
+
+    def _enforce_project_budgets(self, summaries: list[ProjectSummary]) -> None:
+        cfg_runtime = getattr(getattr(self, "config", None), "runtime", None)
+        max_duration = getattr(cfg_runtime, "project_max_duration", None)
+        if max_duration is None:
+            return
+        started_map = getattr(self, "project_started_at", None)
+        if started_map is None:
+            return
+        now = time.monotonic()
+        active_ids: set[str] = set()
+        for summary in summaries:
+            if summary.status != "active":
+                started_map.pop(summary.id, None)
+                continue
+            active_ids.add(summary.id)
+            started_at = started_map.setdefault(summary.id, now)
+            elapsed = now - started_at
+            if elapsed >= max_duration:
+                LOG.warning(
+                    "project budget exceeded project=%s elapsed=%.1fs limit=%ss -> stopping project",
+                    summary.id,
+                    elapsed,
+                    max_duration,
+                )
+                for task in self.futures.values():
+                    if task.project_id == summary.id:
+                        task.cancellation.cancel("project_budget_exceeded")
+                self.client.stop_project(summary.id)
+                started_map.pop(summary.id, None)
+        for pid in list(started_map):
+            if pid not in active_ids:
+                started_map.pop(pid, None)
+
+    def _cleanup_orphan_containers(self, summaries: list[ProjectSummary]) -> None:
+        cfg_runtime = getattr(getattr(self, "config", None), "runtime", None)
+        if not getattr(cfg_runtime, "cleanup_orphans", True):
+            return
+        now = time.monotonic()
+        last = getattr(self, "_last_orphan_cleanup", 0.0)
+        if now - last < 30.0:
+            return
+        self._last_orphan_cleanup = now
+        managed_fn = getattr(self.container_manager, "managed_container_names", None)
+        if not callable(managed_fn):
+            return
+        known_names = {self.container_manager.container_name(s.id) for s in summaries}
+        for name in managed_fn():
+            if name in known_names or name in self._cleanup_pending:
+                continue
+            future = self.cleanup_executor.submit(self.container_manager.cleanup_orphan, name)
+            self.cleanup_futures[future] = (name, None, None)
+            self._cleanup_pending.add(name)
+
     def _run_startup_healthchecks(self, *, show_commands: bool) -> None:
         results = run_startup_healthchecks(self.config, show_commands=show_commands)
+        unhealthy_ttl = getattr(self.config.runtime, "unhealthy_retry_after", UNHEALTHY_RETRY_AFTER_SECONDS)
+        now = time.time()
+        for result in results:
+            if not result.ok:
+                self.worker_unhealthy_until[result.worker_name] = now + unhealthy_ttl
+                LOG.warning(
+                    "startup healthcheck failed worker=%s marked unhealthy for %ss",
+                    result.worker_name,
+                    unhealthy_ttl,
+                )
         if any(result.ok for result in results):
             return
         raise RuntimeError(format_failure_summary(results))

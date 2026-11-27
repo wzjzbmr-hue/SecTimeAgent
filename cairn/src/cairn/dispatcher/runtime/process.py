@@ -42,15 +42,27 @@ class ExecProcess(Protocol):
 
 
 class ManagedProcess:
-    def __init__(self, container: Container, command: list[str], env: dict[str, str]):
+    def __init__(
+        self,
+        container: Container,
+        command: list[str],
+        env: dict[str, str],
+        *,
+        max_output_bytes: int = 8 * 1024 * 1024,
+    ):
         self.command = command
         self.env = env
         self._container = container
         self._api = container.client.api
+        self._max_output_bytes = max(1024, int(max_output_bytes))
         self._exec_id: str | None = None
         self._reader: threading.Thread | None = None
         self._stdout: list[str] = []
         self._stderr: list[str] = []
+        self._stdout_len = 0
+        self._stderr_len = 0
+        self._stdout_truncated = False
+        self._stderr_truncated = False
         self._returncode: int | None = None
         self._timed_out = False
         self._cancel_reason: str | None = None
@@ -129,9 +141,13 @@ class ManagedProcess:
             for chunk in stream:
                 stdout, stderr = self._split_chunk(chunk)
                 if stdout:
-                    self._stdout.append(stdout)
+                    self._stdout_len, self._stdout_truncated = self._append_capped(
+                        self._stdout, stdout, self._stdout_len, self._stdout_truncated
+                    )
                 if stderr:
-                    self._stderr.append(stderr)
+                    self._stderr_len, self._stderr_truncated = self._append_capped(
+                        self._stderr, stderr, self._stderr_len, self._stderr_truncated
+                    )
         except DockerException as exc:
             self._read_error = str(exc)
         finally:
@@ -170,12 +186,47 @@ class ManagedProcess:
                 return 137 if self._timed_out else 1
             time.sleep(0.1)
 
+    def _append_capped(
+        self,
+        chunks: list[str],
+        piece: str,
+        current_len: int,
+        truncated: bool,
+    ) -> tuple[int, bool]:
+        limit = self._max_output_bytes
+        if len(piece) >= limit:
+            chunks.clear()
+            chunks.append(piece[-limit:])
+            return limit, True
+        chunks.append(piece)
+        current_len += len(piece)
+        if current_len > limit:
+            truncated = True
+            while chunks and current_len > limit:
+                overflow = current_len - limit
+                head = chunks[0]
+                if len(head) <= overflow:
+                    chunks.pop(0)
+                    current_len -= len(head)
+                else:
+                    chunks[0] = head[overflow:]
+                    current_len -= overflow
+        return current_len, truncated
+
     def _kill_pid(self, pid: int) -> None:
         last_error: str | None = None
+        group_kill_script = (
+            f"pgid=$(ps -o pgid= -p {pid} 2>/dev/null | tr -d ' '); "
+            f"if [ -n \"$pgid\" ] && [ \"$pgid\" != \"1\" ] && [ \"$pgid\" != \"0\" ]; then "
+            f"kill -KILL -\"$pgid\" 2>/dev/null || true; "
+            f"fi; "
+            f"pkill -KILL -P {pid} 2>/dev/null || true; "
+            f"kill -KILL {pid} 2>/dev/null || true"
+        )
         for command in (
+            ["/bin/sh", "-c", group_kill_script],
+            ["sh", "-c", group_kill_script],
             ["kill", "-KILL", str(pid)],
-            ["/bin/sh", "-lc", f"kill -KILL {pid}"],
-            ["sh", "-lc", f"kill -KILL {pid}"],
         ):
             try:
                 result = self._container.exec_run(command, stdout=False, stderr=False)

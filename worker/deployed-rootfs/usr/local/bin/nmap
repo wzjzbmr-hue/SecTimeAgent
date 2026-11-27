@@ -1,0 +1,22 @@
+#!/bin/sh
+# Transparent nmap wrapper for unprivileged Docker containers.
+# Injects --unprivileged (TCP connect scan) unless the caller explicitly requests
+# a raw-socket scan mode or privilege flag, avoiding "Couldn't open a raw socket" failures.
+REAL_NMAP="/usr/bin/nmap"
+[ -x "$REAL_NMAP" ] || REAL_NMAP="/usr/lib/nmap/nmap"
+
+NEED_UNPRIV=1
+for arg in "$@"; do
+  case "$arg" in
+    --unprivileged|--privileged|-sS|-sU|-sA|-sW|-sM|-sN|-sF|-sX|-sO|-sY|-sZ|-O|-PE|-PP|-PM|-PR)
+      NEED_UNPRIV=0
+      break
+      ;;
+  esac
+done
+
+if [ "$NEED_UNPRIV" -eq 1 ]; then
+  exec "$REAL_NMAP" --unprivileged "$@"
+else
+  exec "$REAL_NMAP" "$@"
+fi
