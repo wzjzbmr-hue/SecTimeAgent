@@ -1,4 +1,4 @@
-# Cairn Agent Worker
+# SecTimeAgent
 
 Ubuntu 现用 Cairn 的协作开发基线。核心源码和 Worker 自研文件取自 Ubuntu 实际部署，未合入 Windows 工作区改动，也未采用 `nmap-ready` 候选镜像。
 
@@ -35,8 +35,8 @@ deployment/            版本身份和验证记录
 使用独立的 Linux x86_64 Docker 主机或 Ubuntu/WSL2 环境，安装 Docker Engine、Compose v2；宿主机运行 Python 时另需 Python 3.12+ 和 uv。当前部署采用 host 网络和固定端口 8000、8099、8100，同一 Docker 主机同时运行多套实例需要另行调整网络和端口。
 
 ```bash
-git clone https://github.com/wzjzbmr-hue/Cairn-Agent-Worker.git
-cd Cairn-Agent-Worker
+git clone https://github.com/wzjzbmr-hue/SecTimeAgent.git
+cd SecTimeAgent
 mkdir -p config runtime/cairn runtime/bench-results
 cp config/dispatch.ubuntu.example.yaml config/dispatch.yaml
 ```
