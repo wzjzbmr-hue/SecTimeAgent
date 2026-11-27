@@ -24,7 +24,7 @@ git push -u origin codex/describe-your-change
 由仓库维护者授予访问权限；支持 Fork 时，也可 Fork 后向原仓库提交 PR。若 Fork：`origin` 指向自己的 Fork，`upstream` 指向本仓库，从 `upstream/main` 同步基线。
 
 ```bash
-git remote add upstream https://github.com/wzjzbmr-hue/Cairn-Agent-Worker.git
+git remote add upstream https://github.com/wzjzbmr-hue/SecTimeAgent.git
 git fetch upstream
 git switch -c codex/describe-your-change upstream/main
 # 修改、测试并提交后
