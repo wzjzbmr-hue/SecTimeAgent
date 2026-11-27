@@ -1,0 +1,65 @@
+# 2026 能源行业人工智能应用大赛（赛道三）8核16G50G 比赛配置示例
+# 说明：
+# - 真实模型 API Key 与平台 AGENT_TOKEN 统一托管在宿主机 token_proxy / race_orchestrator，
+#   严禁写入 Worker 环境变量（防止 T+N 公开对话泄密）
+# - 支持 2 个在线靶机题 + 2 个纯附件题并行（共 4 槽），单容器硬限 3G 内存 / 2.5 核 / 512 PIDs
+# - completed_action: remove 配合 40GB 可用盘防爆盘
+
+server: http://127.0.0.1:8000
+admin_token: REPLACE_WITH_LOCAL_CAIRN_ADMIN_TOKEN
+
+runtime:
+  interval: 3
+  max_workers: 4
+  max_running_projects: 4
+  max_project_workers: 1
+  healthcheck_timeout: 60
+  worker_healthcheck: startup_only
+  prompt_group: competition
+  project_max_duration: 1200
+  max_intent_failures: 3
+  failure_backoff_base: 5
+  unhealthy_retry_after: 120
+  cleanup_orphans: true
+
+tasks:
+  bootstrap:
+    timeout: 480
+    conclude_timeout: 90
+  reason:
+    timeout: 180
+    max_intents: 2
+  explore:
+    timeout: 480
+    conclude_timeout: 90
+
+container:
+  image: cairn-worker:competition-20261201
+  network_mode: host
+  completed_action: remove
+  init: true
+  mem_limit: 3g
+  cpu_limit: 2.5
+  pids_limit: 512
+  stdout_max_bytes: 8388608
+  archive_dir: /workspace/runtime/archives
+
+common_env:
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+
+workers:
+  - name: primary_domestic
+    type: claudecode
+    task_types:
+      - bootstrap
+      - reason
+      - explore
+    max_running: 4
+    priority: 0
+    env:
+      # 仅指向宿主机 token_proxy 的 /kimi 入口，真实网关 URL 和 API Key 由宿主机托管，
+      # 触发限流/欠费/故障时自动按 Kimi -> TokenPlan(GLM-5.3/Qwen4-Max) -> AliDashScope -> GLM-Coding 无缝降级
+      ANTHROPIC_BASE_URL: http://127.0.0.1:8100/kimi
+      ANTHROPIC_MODEL: kimi-k3.1-pro-highspeed
+      ANTHROPIC_AUTH_TOKEN: proxy-managed-placeholder
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'
