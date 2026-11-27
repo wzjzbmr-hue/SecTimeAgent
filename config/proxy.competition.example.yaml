@@ -2,8 +2,8 @@
 # 优先级：Kimi (kimi-k3.1-pro-highspeed) -> 阿里云 TokenPlan (glm-5.3 / qwen4-max)
 #       -> 阿里云 DashScope 按量保底 (glm-5.3 / qwen4-max / kimi-k3.1-pro) -> 智谱 GLM Coding Plan (11/30 恢复后备援)
 #
-# 12/1 现场调试时：在官方平台“环境配置 -> 网关配置”登记下方各官方 base_url，
-# 并将平台生成的本队专属代理 URL 替换进 url 字段；Anthropic 协议路径严禁省略 /v1（客户端会自动拼接 /v1/messages）
+# 现场调试时：在平台“环境配置 -> 网关配置”登记下方各官方 base_url，
+# 并将平台生成的专属代理 URL 替换进 url 字段；Anthropic 协议路径严禁省略 /v1（客户端会自动拼接 /v1/messages）
 
 routes:
   kimi:

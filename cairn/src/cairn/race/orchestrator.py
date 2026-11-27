@@ -49,8 +49,8 @@ class OrchestratorConfig:
     disk_min_free_gb: float = 4.0
     attachments_dir: str = "/tmp/cairn-attachments"
     state_file: str = "runtime/race-orchestrator-state.json"
-    start_at: str | None = None  # ISO-8601 e.g. 2026-12-02T08:30:00+08:00
-    end_at: str | None = None    # ISO-8601 e.g. 2026-12-02T12:30:00+08:00
+    start_at: str | None = None  # ISO-8601 e.g. 2026-01-01T08:30:00+08:00
+    end_at: str | None = None    # ISO-8601 e.g. 2026-01-01T12:30:00+08:00
 
 
 @dataclass
