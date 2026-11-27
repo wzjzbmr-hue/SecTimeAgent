@@ -1,0 +1,8 @@
+# 运行时产物
+results/
+# 附件包可再生（由 energy-scenarios 各目录打包），不入库
+attachments/
+# 旧备份
+challenges.yaml.bak_*
+# git-leak 靶机的 .git 历史由 setup_repo.sh 现场重建
+challenges/git-leak/site/

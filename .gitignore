@@ -1,0 +1,17 @@
+# Personal configuration and runtime state
+config/dispatch.yaml
+dispatch.yaml
+.env
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+runtime/
+datas/
+bench/results/
+bench/attachments/
+bench/challenges.local.yaml
+*.tar
+*.tar.gz
+*.zip

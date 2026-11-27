@@ -1,0 +1,15 @@
+name: cairn-dev
+services:
+  server:
+    container_name: cairn-dev-server
+    volumes:
+      - ./cairn/src:/cairn/src:ro
+      - ./cairn/tests:/cairn/tests:ro
+  proxy:
+    container_name: cairn-dev-proxy
+  submit:
+    container_name: cairn-dev-submit
+  dispatcher:
+    container_name: cairn-dev-dispatcher
+    volumes:
+      - ./cairn/src:/cairn/src:ro

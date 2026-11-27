@@ -1,0 +1,52 @@
+server: http://127.0.0.1:8000
+runtime:
+  interval: 3
+  max_workers: 1
+  max_running_projects: 1
+  max_project_workers: 1
+  healthcheck_timeout: 90
+  worker_healthcheck: startup_only
+  prompt_group: default
+tasks:
+  bootstrap:
+    timeout: 600
+    conclude_timeout: 120
+  reason:
+    timeout: 240
+    max_intents: 2
+  explore:
+    timeout: 600
+    conclude_timeout: 120
+container:
+  image: cairn-worker:tools-ready-20261125
+  network_mode: host
+  completed_action: stop
+common_env:
+  RACE_TOKEN: REPLACE_WITH_YOUR_RACE_TOKEN
+  TSEC_SERVER_HOST: 127.0.0.1:8099
+  TSEC_AGENT_TOKEN: REPLACE_WITH_YOUR_TSEC_AGENT_TOKEN
+workers:
+- name: glm53
+  type: claudecode
+  task_types:
+  - bootstrap
+  - reason
+  - explore
+  max_running: 1
+  priority: 0
+  env:
+    ANTHROPIC_BASE_URL: http://127.0.0.1:8100/glm
+    ANTHROPIC_MODEL: glm-5.3
+    ANTHROPIC_AUTH_TOKEN: REPLACE_WITH_YOUR_ANTHROPIC_AUTH_TOKEN
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+- name: deepseek_reason
+  type: claudecode
+  task_types:
+  - reason
+  max_running: 1
+  priority: 10
+  env:
+    ANTHROPIC_BASE_URL: http://127.0.0.1:8100/ds
+    ANTHROPIC_MODEL: deepseek-chat
+    ANTHROPIC_AUTH_TOKEN: REPLACE_WITH_YOUR_ANTHROPIC_AUTH_TOKEN
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'

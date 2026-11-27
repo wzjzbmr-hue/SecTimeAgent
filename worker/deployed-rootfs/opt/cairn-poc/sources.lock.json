@@ -1,0 +1,73 @@
+{
+    "schema_version": 1,
+    "as_of": "2026-11-23",
+    "sources": [
+        {
+            "id": "nuclei-templates",
+            "url": "https://github.com/projectdiscovery/nuclei-templates.git",
+            "commit": "5442582a875f96887bfe403c6de562de460897e7",
+            "ref": "v10.5.2",
+            "path": ".local/nuclei-templates",
+            "kind": "template",
+            "historical": false
+        },
+        {
+            "id": "vulhub",
+            "url": "https://github.com/vulhub/vulhub.git",
+            "commit": "9b90d4276f84feed6333286afeb7e1250379a1da",
+            "path": "pocs/vulhub",
+            "kind": "environment",
+            "historical": false
+        },
+        {
+            "id": "Awesome-POC",
+            "url": "https://github.com/Threekiii/Awesome-POC.git",
+            "commit": "0f9e22b660cb1ea12c1c3668f9128d93e08da412",
+            "path": "pocs/Awesome-POC",
+            "kind": "knowledge",
+            "historical": false
+        },
+        {
+            "id": "CVE-PoC",
+            "url": "https://github.com/iSee857/CVE-PoC.git",
+            "commit": "6e6a968cda696555b6cf0e5abffe2c1d8336a520",
+            "path": "pocs/CVE-PoC",
+            "kind": "script",
+            "historical": false
+        },
+        {
+            "id": "exphub",
+            "url": "https://github.com/zhzyker/exphub.git",
+            "commit": "946405b3447dbaf2a5eb49e2f56ec33fe1165e49",
+            "path": "pocs/exphub",
+            "kind": "script",
+            "historical": true
+        },
+        {
+            "id": "2023Hvv_",
+            "url": "https://github.com/passwa11/2023Hvv_.git",
+            "commit": "9f530c910492ba03b58befe84c301c865eb9fc81",
+            "path": "pocs/2023Hvv_",
+            "kind": "knowledge",
+            "historical": true
+        },
+        {
+            "id": "peiqi",
+            "url": "https://github.com/wukong-bin/PeiQi-WIKI-POC.git",
+            "commit": "f533fbeea809915d88a69ad3b1d690462fd8b180",
+            "ref": "main",
+            "path": "pocs/PeiQi-WIKI-POC",
+            "kind": "knowledge",
+            "historical": false
+        },
+        {
+            "id": "vulmap",
+            "url": "https://github.com/zhzyker/vulmap.git",
+            "commit": "3694afb7a3adec0b7f7c9027aab596e7b147c585",
+            "ref": "main",
+            "path": "pocs/vulmap",
+            "kind": "script",
+            "historical": false
+        }
+    ]
+}

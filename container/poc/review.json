@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "source": "nuclei-templates",
+  "commit": "5442582a875f96887bfe403c6de562de460897e7",
+  "engine_version": "v3.7.1",
+  "baseline_commit": "7962af2c556163a397101d7636c5ddaf6220f5d5",
+  "renamed": [
+    {
+      "old_cve": "CVE-2021-26292",
+      "old_path": "http/cves/2021/CVE-2021-26292.yaml",
+      "new_path": "http/vulnerabilities/afterlogic-path-disclosure.yaml",
+      "new_sha256": "77de6320775203524c4cdc444a9bb644b11df777d950a38a37ccb0354885e6f4",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2024-12760",
+      "old_path": "http/cves/2024/CVE-2024-12760.yaml",
+      "new_path": "http/vulnerabilities/bentoml-open-redirect.yaml",
+      "new_sha256": "f0cb7938fd6a1c636f0bd27240f27272add821b1d616c55f849666938f327c04",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2024-25669",
+      "old_path": "http/cves/2024/CVE-2024-25669.yaml",
+      "new_path": "http/vulnerabilities/caseaware-xss.yaml",
+      "new_sha256": "476129a3e0c3d8108b0744fdb856ce5dda2dc5c908a18a29306db401431163d8",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2024-23163",
+      "old_path": "http/cves/2024/CVE-2024-23163.yaml",
+      "new_path": "http/vulnerabilities/gestsup-account-takeover.yaml",
+      "new_sha256": "de2ad348a00bf5e823c42af3611291123213c11ed813a0359ef222af8f618567",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2024-23167",
+      "old_path": "http/cves/2024/CVE-2024-23167.yaml",
+      "new_path": "http/vulnerabilities/gestsup-xss.yaml",
+      "new_sha256": "8050a58fba5bffd79baee00161c3317824a8f9b1d8ecdd1de0d587f35c8f938b",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2023-39024",
+      "old_path": "http/cves/2023/CVE-2023-39024.yaml",
+      "new_path": "http/vulnerabilities/harman-media-suite-lfi.yaml",
+      "new_sha256": "96ef7631f148b3752b438d6e63c0f7acaf6d8c7348cc11f65e0b1f8feec7def5",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2021-27748",
+      "old_path": "http/cves/2021/CVE-2021-27748.yaml",
+      "new_path": "http/vulnerabilities/ibm/websphere-ssrf.yaml",
+      "new_sha256": "fc77fdac51e01d7725701cc139a4cce784b2943a5ed472a5d1d96a819916142e",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2018-10818",
+      "old_path": "http/cves/2018/CVE-2018-10818.yaml",
+      "new_path": "http/vulnerabilities/lg-nas-rce.yaml",
+      "new_sha256": "b845a392fc28d4b1a58fac0efaa7c0475a8e244303151e930aa06fa5b9694066",
+      "request_section_unchanged": true,
+      "canonical_cves": [
+        "CVE-2018-14839"
+      ],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2024-0713",
+      "old_path": "http/cves/2024/CVE-2024-0713.yaml",
+      "new_path": "http/vulnerabilities/monitorr-file-upload.yaml",
+      "new_sha256": "8a288d1a9b2007845fe5e3f8259de3e093a93ad5cedfd2122e43dd2b2c3952eb",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2023-39120",
+      "old_path": "http/cves/2023/CVE-2023-39120.yaml",
+      "new_path": "http/vulnerabilities/nodogsplash-lfi.yaml",
+      "new_sha256": "e7a10c66292324263d9dc353822b6e94bfdcd52bc7f57086f441511884eb0a47",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2021-28073",
+      "old_path": "http/cves/2021/CVE-2021-28073.yaml",
+      "new_path": "http/vulnerabilities/ntopng-auth-bypass.yaml",
+      "new_sha256": "ad33b4510a76ef7ba281b5cde1805f3b5425b13fec7cd5815133e6d0840d2398",
+      "request_section_unchanged": true,
+      "canonical_cves": [
+        "CVE-2021-28073"
+      ],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2018-16341",
+      "old_path": "http/cves/2018/CVE-2018-16341.yaml",
+      "new_path": "http/vulnerabilities/nuxeo-ssti-rce.yaml",
+      "new_sha256": "d05b9068e8a1348b2fc351b543cbbf449774becfc42b04c006605d3e86626517",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2023-1434",
+      "old_path": "http/cves/2023/CVE-2023-1434.yaml",
+      "new_path": "http/vulnerabilities/odoo-xss.yaml",
+      "new_sha256": "b61536d83e9321f8feb909c92f06e9e8b95dd08eba624fc75ba9dabb64cae380",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2022-29301",
+      "old_path": "http/cves/2022/CVE-2022-29301.yaml",
+      "new_path": "http/vulnerabilities/solarview-compact-pow-xss.yaml",
+      "new_sha256": "e9869facdbe91e9585488e85bb52ab55a3726f89610640f6a5a292e9d72da3e5",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2022-29299",
+      "old_path": "http/cves/2022/CVE-2022-29299.yaml",
+      "new_path": "http/vulnerabilities/solarview-compact-time-begin-xss.yaml",
+      "new_sha256": "d0c5e43ecb1eae7edbc0a3254fd68369bffbd23aada9a30fb336eb6d01216c6f",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2021-44910",
+      "old_path": "http/cves/2021/CVE-2021-44910.yaml",
+      "new_path": "http/vulnerabilities/springblade-info-leak.yaml",
+      "new_sha256": "3fa14a36bfad8b0e975d3d761b3f6ddb230609efd5ad6fe0ddecd6ba1aa2cfb5",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2023-24367",
+      "old_path": "http/cves/2023/CVE-2023-24367.yaml",
+      "new_path": "http/vulnerabilities/temenos-t24-xss.yaml",
+      "new_sha256": "5abc4a19264dd3a7a23642214032a026f9265c9b8f5ecd5ee53ee3ee19f06112",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2022-38322",
+      "old_path": "http/cves/2022/CVE-2022-38322.yaml",
+      "new_path": "http/vulnerabilities/temenos-transact-xss.yaml",
+      "new_sha256": "c1e155dccd070630acc621d184c5862b67fa7a1fb240218cc36c9c8e78dba420",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2024-57050",
+      "old_path": "http/cves/2024/CVE-2024-57050.yaml",
+      "new_path": "http/vulnerabilities/tp-link-wr840n-auth-bypass.yaml",
+      "new_sha256": "448f9fcaba1752f389ee509e6fecfbb4ca50898491e06e0f22c432999fbe4201",
+      "request_section_unchanged": true,
+      "canonical_cves": [
+        "CVE-2018-11714"
+      ],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2025-32101",
+      "old_path": "http/cves/2025/CVE-2025-32101.yaml",
+      "new_path": "http/vulnerabilities/una-cms-rce.yaml",
+      "new_sha256": "5f3dc454def57581734c2488f6185e2ebd66ea22c83b6efb801019ae857ffcf7",
+      "request_section_unchanged": false,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2021-28854",
+      "old_path": "http/cves/2021/CVE-2021-28854.yaml",
+      "new_path": "http/vulnerabilities/vicidial-info-disclosure.yaml",
+      "new_sha256": "11f674a8711d4feee0e701c9c50a82408512a8b7ddc81b11d1a91f61032e4f0e",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    },
+    {
+      "old_cve": "CVE-2025-34085",
+      "old_path": "http/cves/2025/CVE-2025-34085.yaml",
+      "new_path": "http/vulnerabilities/wordpress/simple-file-list-rce.yaml",
+      "new_sha256": "0047a60a0b4a20cb6e14dd19afd6a55e0b9597cc64f09392edaa3ccb507c647a",
+      "request_section_unchanged": true,
+      "canonical_cves": [],
+      "note": "Historical template identity only; current CVE classification may be corrected or removed. Use current metadata, not the old filename."
+    }
+  ],
+  "withdrawn": [
+    {
+      "cve": "CVE-2024-28752",
+      "old_path": "http/cves/2024/CVE-2024-28752.yaml",
+      "reason": "Upstream removed a deployment-specific /test placeholder. Requires actual SOAP endpoint, operation, Aegis binding and parameter mapping. Do not restore generic detection.",
+      "reference": "https://github.com/projectdiscovery/nuclei-templates/pull/16745",
+      "vendor_advisory": "https://cxf.apache.org/security-advisories.data/CVE-2024-28752.txt"
+    }
+  ],
+  "known_warnings": [
+    {
+      "path": "http/cves/2026/CVE-2026-18143.yaml",
+      "sha256": "a39731ae49d483113955e7890d9f1dbc562e862c09a8935d025534364d842ed8",
+      "message": "Failed to evaluate expression 'randstr': No parameter 'randstr' found.",
+      "cause": "Validation lacks runtime random context; safe localhost alias/filename regression confirms correct expansion during execution. No upload template executed.",
+      "regression": "test_nuclei_random.py"
+    }
+  ]
+}

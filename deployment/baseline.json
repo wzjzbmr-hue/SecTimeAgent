@@ -1,0 +1,35 @@
+{
+  "snapshot_date": "2026-11-27",
+  "source": "Ubuntu deployed baseline only",
+  "ubuntu_git_head": "ac9ca121de880fefb333c2d9b61233a6747669d7",
+  "ubuntu_git_branch": "zcode/2026-11-25-changes",
+  "upstream": "https://github.com/oritera/Cairn",
+  "app_image": {
+    "tag": "cairn-app:migration-20261119",
+    "id": "sha256:81ad307946eca709918a137ce17ca870cd78d7f1178d2fb0bb96bccb78aa3cd9"
+  },
+  "worker_image": {
+    "tag": "cairn-worker:tools-ready-20261125",
+    "id": "sha256:81e1b018223a72bfa67b51bddf2a0df8126198a3b7530a1b524e651af6a83cf5",
+    "config_digest": "411af55d5a3826d32b38831fcc3e3d8a0e3b35421b294a4cfd571a365f93547d",
+    "size": 26442336238
+  },
+  "app_python_comparison": {
+    "matched_files": 43,
+    "different_files": 0
+  },
+  "excluded": [
+    "Windows working tree changes",
+    "nmap-ready image",
+    "credentials",
+    "private judge registry",
+    "runtime databases/logs",
+    "experiment outputs",
+    "full third-party tool and PoC distributions"
+  ],
+  "configuration_changes": [
+    "Credentials replaced with placeholders",
+    "Judge registry replaced with empty fixture list"
+  ],
+  "worker_rebuild": "Exact tools-ready environment requires its offline image or the historical ics-ready baseline; container/Dockerfile is the upstream foundation and not an exact deployed rebuild."
+}

@@ -1,0 +1,10 @@
+services:
+  server:
+    build: .
+    image: cairn-app:ubuntu-baseline-dev
+  proxy:
+    image: cairn-app:ubuntu-baseline-dev
+  submit:
+    image: cairn-app:ubuntu-baseline-dev
+  dispatcher:
+    image: cairn-app:ubuntu-baseline-dev

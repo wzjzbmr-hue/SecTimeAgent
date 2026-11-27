@@ -1,0 +1,4 @@
+# Exact wheel hashes from official PyPI JSON; x86_64 Worker, no dependency resolution.
+pycryptodome==3.20.0 --hash=sha256:76cb39afede7055127e35a444c1c041d2e8d2f1f9c121ecef573757ba4cd2c3c
+art==6.5 --hash=sha256:70706408144c45c666caab690627d5c74aea7b6c7ce8cc968408ddeef8d84afd
+requests-toolbelt==1.0.0 --hash=sha256:cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06

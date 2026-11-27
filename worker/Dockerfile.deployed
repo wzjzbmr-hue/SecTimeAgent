@@ -1,0 +1,10 @@
+# Build context: repository root. First load the verified tools-ready offline image.
+# This preserves the deployed tool environment; it is not a from-scratch rebuild.
+ARG BASE_IMAGE=cairn-worker:tools-ready-20261125
+FROM ${BASE_IMAGE}
+USER root
+COPY worker/deployed-rootfs/ /
+RUN chmod 755 /usr/local/bin/poc-catalog /usr/local/bin/uuidgen \
+ && chown -R kali:kali /home/kali/workspace
+USER kali
+WORKDIR /home/kali/workspace

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /opt/cairn-poc-runtime/bin/python /opt/cairn-poc/poc_catalog.py "$@"

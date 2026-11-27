@@ -1,0 +1,63 @@
+name: cairn-ubuntu
+
+x-runtime: &runtime
+  image: cairn-app:migration-20261119
+  network_mode: host
+  restart: unless-stopped
+  environment:
+    TZ: Asia/Shanghai
+
+services:
+  server:
+    <<: *runtime
+    container_name: cairn-ubuntu-server
+    command: [/cairn/.venv/bin/cairn, serve, --host, 0.0.0.0, --no-access-log]
+    volumes:
+      - ./runtime/cairn:/root/.local/share/cairn
+    healthcheck:
+      test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/projects', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  proxy:
+    <<: *runtime
+    container_name: cairn-ubuntu-proxy
+    command: [/cairn/.venv/bin/python, /workspace/bench/token_proxy.py, --host, 127.0.0.1, --port, '8100', --route, 'glm=https://open.bigmodel.cn/api/anthropic', --route, 'ds=https://api.deepseek.com/anthropic']
+    volumes:
+      - ./bench:/workspace/bench:ro
+      - ./runtime/bench-results:/workspace/bench/results
+    healthcheck:
+      test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  submit:
+    <<: *runtime
+    container_name: cairn-ubuntu-submit
+    command: [/cairn/.venv/bin/python, /workspace/bench/submit_server.py, --host, 127.0.0.1, --port, '8099']
+    volumes:
+      - ./bench:/workspace/bench:ro
+      - ./runtime/bench-results:/workspace/bench/results
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  dispatcher:
+    <<: *runtime
+    container_name: cairn-ubuntu-dispatcher
+    command: [/cairn/.venv/bin/cairn, dispatch, --config, /config/dispatch.yaml]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config/dispatch.yaml:/config/dispatch.yaml:ro
+    depends_on:
+      server:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
+      submit:
+        condition: service_healthy

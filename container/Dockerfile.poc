@@ -1,0 +1,13 @@
+# Build context: container/. Use a locally verified immutable baseline, not latest.
+ARG BASE_IMAGE=cairn-worker:migration-20261119
+FROM ${BASE_IMAGE}
+USER root
+COPY --chown=kali:kali poc /opt/cairn-poc
+RUN python3 -m venv --system-site-packages /opt/cairn-poc-runtime && \
+    /opt/cairn-poc-runtime/bin/pip install --no-cache-dir --no-deps --only-binary=:all: --require-hashes -r /opt/cairn-poc/requirements.lock.txt && \
+    printf '#!/bin/sh\nexec /opt/cairn-poc-runtime/bin/python /opt/cairn-poc/poc_catalog.py "$@"\n' > /usr/local/bin/poc-catalog && \
+    chmod 755 /usr/local/bin/poc-catalog
+USER kali
+RUN python3 /opt/cairn-poc/poc_catalog.py sync && \
+    python3 /opt/cairn-poc/poc_catalog.py index
+WORKDIR /home/kali/workspace
