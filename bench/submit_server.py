@@ -31,7 +31,13 @@ RESULTS_DIR = ROOT / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
 STATE_LOCK = threading.Lock()
-STATE: dict = {"expected": {}, "challenges": {}, "token": None, "started_at": time.time()}
+STATE: dict = {
+    "expected": {},  # cid -> list[str] (supports single or multiple flags)
+    "challenges": {},
+    "token": None,
+    "started_at": time.time(),
+    "state_file": None,
+}
 RELOAD_PATH: list[str] = []
 
 app = FastAPI(title="Cairn Bench Submit Server")
@@ -42,6 +48,36 @@ class SubmitBody(BaseModel):
     flag: str
 
 
+def _persist_state() -> None:
+    sf = STATE.get("state_file")
+    if not sf:
+        return
+    payload = {
+        "started_at": STATE["started_at"],
+        "challenges": {
+            cid: {
+                **rec,
+                "solved_flags": sorted(rec.get("solved_flags") or []),
+            }
+            for cid, rec in STATE["challenges"].items()
+        },
+    }
+    Path(sf).parent.mkdir(parents=True, exist_ok=True)
+    Path(sf).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_persisted_state(sf: Path) -> None:
+    if not sf.is_file():
+        return
+    try:
+        saved = json.loads(sf.read_text(encoding="utf-8"))
+        for cid, rec in (saved.get("challenges") or {}).items():
+            rec["solved_flags"] = set(rec.get("solved_flags") or [])
+            STATE["challenges"][cid] = rec
+    except Exception:
+        pass
+
+
 def load_challenges(path: Path) -> dict:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     items = data.get("challenges") or []
@@ -49,11 +85,16 @@ def load_challenges(path: Path) -> dict:
     meta = {}
     for item in items:
         cid = item["id"]
-        expected[cid] = item["flag"].strip()
+        if item.get("flags"):
+            flags = [str(f).strip() for f in item["flags"] if str(f).strip()]
+        else:
+            flags = [str(item["flag"]).strip()]
+        expected[cid] = flags
         meta[cid] = {
             "category": item.get("category", "misc"),
             "difficulty": item.get("difficulty", "unknown"),
             "points": item.get("points", 100),
+            "total_flags": len(flags),
         }
     return {"expected": expected, "meta": meta}
 
@@ -72,23 +113,73 @@ def submit(body: SubmitBody, agent_token: str | None = Header(default=None, alia
     if code not in STATE["expected"]:
         return {"ok": False, "reason": "unknown_challenge", "code": code}
 
+    expected_flags = STATE["expected"][code]
+    total_flags = len(expected_flags)
+
     with STATE_LOCK:
         record = STATE["challenges"].setdefault(
-            code, {"solved": False, "attempts": 0, "first_success_at": None, "last_attempt_at": None}
+            code,
+            {
+                "solved": False,
+                "solved_flags": set(),
+                "attempts": 0,
+                "first_success_at": None,
+                "last_attempt_at": None,
+                "flag_times": {},
+            },
         )
         record["attempts"] += 1
         record["last_attempt_at"] = time.time()
 
         if record["solved"]:
-            return {"ok": True, "reason": "already_solved", "code": code}
+            return {
+                "ok": True,
+                "reason": "already_solved",
+                "code": code,
+                "solved_count": len(record["solved_flags"]),
+                "total_flags": total_flags,
+                "question_complete": True,
+            }
 
-        if flag != STATE["expected"][code]:
-            return {"ok": False, "reason": "wrong_flag", "code": code}
+        if flag not in expected_flags:
+            _persist_state()
+            return {
+                "ok": False,
+                "reason": "wrong_flag",
+                "code": code,
+                "solved_count": len(record["solved_flags"]),
+                "total_flags": total_flags,
+                "question_complete": False,
+            }
 
-        record["solved"] = True
-        record["first_success_at"] = time.time()
-        ttf = round(record["first_success_at"] - STATE["started_at"], 1)
-        return {"ok": True, "reason": "correct", "code": code, "ttf_since_start": ttf}
+        if flag in record["solved_flags"]:
+            return {
+                "ok": True,
+                "reason": "already_solved",
+                "code": code,
+                "solved_count": len(record["solved_flags"]),
+                "total_flags": total_flags,
+                "question_complete": len(record["solved_flags"]) >= total_flags,
+            }
+
+        now = time.time()
+        record["solved_flags"].add(flag)
+        ttf = round(now - STATE["started_at"], 1)
+        if record["first_success_at"] is None:
+            record["first_success_at"] = now
+        record["flag_times"][f"flag_{len(record['solved_flags'])}"] = ttf
+        complete = len(record["solved_flags"]) >= total_flags
+        record["solved"] = complete
+        _persist_state()
+        return {
+            "ok": True,
+            "reason": "correct",
+            "code": code,
+            "ttf_since_start": ttf,
+            "solved_count": len(record["solved_flags"]),
+            "total_flags": total_flags,
+            "question_complete": complete,
+        }
 
 
 @app.get("/attachment/{name}")
@@ -108,11 +199,17 @@ def results():
         out = {}
         for cid, meta in STATE["meta"].items():
             rec = STATE["challenges"].get(cid, {})
+            solved_count = len(rec.get("solved_flags") or ())
+            total_flags = meta.get("total_flags", 1)
             out[cid] = {
                 **meta,
                 "solved": rec.get("solved", False),
+                "solved_count": solved_count,
+                "total_flags": total_flags,
+                "question_complete": solved_count >= total_flags and total_flags > 0,
                 "attempts": rec.get("attempts", 0),
                 "first_success_at": rec.get("first_success_at"),
+                "flag_times": rec.get("flag_times") or {},
             }
         solved = sum(1 for v in out.values() if v["solved"])
         return {"solved": solved, "total": len(out), "challenges": out}
@@ -198,16 +295,26 @@ def reset_target(code: str):
     return {"ok": all_ok, "code": code, "containers": results}
 
 @app.post("/reset")
-def reset():
+def reset(agent_token: str | None = Header(default=None, alias="Agent-Token")):
+    if STATE["token"] and agent_token != STATE["token"]:
+        raise HTTPException(401, "invalid agent token")
     with STATE_LOCK:
         STATE["challenges"] = {}
         STATE["started_at"] = time.time()
+        _persist_state()
     return {"ok": True}
 
 
 @app.post("/dump")
 def dump():
-    payload = {"started_at": STATE["started_at"], "challenges": STATE["challenges"]}
+    with STATE_LOCK:
+        payload = {
+            "started_at": STATE["started_at"],
+            "challenges": {
+                cid: {**rec, "solved_flags": sorted(rec.get("solved_flags") or [])}
+                for cid, rec in STATE["challenges"].items()
+            },
+        }
     path = RESULTS_DIR / f"submit-{int(time.time())}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "path": str(path)}
@@ -219,12 +326,16 @@ def main() -> None:
     ap.add_argument("--host", default="127.0.0.1", help="用 0.0.0.0 才能被 worker 容器访问")
     ap.add_argument("--challenges", default=str(ROOT / "challenges.yaml"))
     ap.add_argument("--token", default=None)
+    ap.add_argument("--state-file", default=str(RESULTS_DIR / "submit-state.json"))
     args = ap.parse_args()
 
     loaded = load_challenges(Path(args.challenges))
     STATE["expected"] = loaded["expected"]
     STATE["meta"] = loaded["meta"]
     STATE["token"] = args.token
+    STATE["state_file"] = args.state_file
+    if args.state_file:
+        _load_persisted_state(Path(args.state_file))
     RELOAD_PATH.append(args.challenges)
 
     print(f"loaded {len(STATE['expected'])} challenges: {', '.join(STATE['expected'])}")
