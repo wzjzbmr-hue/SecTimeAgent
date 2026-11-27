@@ -37,7 +37,7 @@ deployment/            版本身份和验证记录
 ```bash
 git clone https://github.com/wzjzbmr-hue/SecTimeAgent.git
 cd SecTimeAgent
-mkdir -p config runtime/cairn runtime/bench-results
+mkdir -p config runtime/cairn runtime/bench-results bench/results
 cp config/dispatch.ubuntu.example.yaml config/dispatch.yaml
 ```
 

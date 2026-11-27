@@ -1,0 +1,10 @@
+[Unit]
+Description=Auto-start SecTimeAgent on 2026-12-02 08:29:00 Asia/Shanghai (1 min ahead of 08:30 kickoff)
+
+[Timer]
+OnCalendar=2026-12-02 08:29:00
+Persistent=true
+Unit=cairn-race.service
+
+[Install]
+WantedBy=timers.target

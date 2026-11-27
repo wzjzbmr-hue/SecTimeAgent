@@ -61,6 +61,7 @@ def main():
     ap.add_argument("--threads", type=int, default=30, help="concurrent requests; keep at or below 50, single-threaded targets drop requests above that")
     ap.add_argument("--timeout", type=float, default=5.0)
     ap.add_argument("--max-candidates", type=int, default=0, help="stop after this many requests; 0 means no limit")
+    ap.add_argument("--max-seconds", type=float, default=180.0, help="hard wall-clock time cap in seconds; 0 means no limit")
     ap.add_argument("--dry-run", action="store_true", help="print how many paths each stage would try, without sending anything")
     args = ap.parse_args()
 
@@ -149,13 +150,18 @@ def main():
                 work.task_done()
 
     started = time.time()
+    deadline = (started + args.max_seconds) if args.max_seconds and args.max_seconds > 0 else None
     threading.Thread(target=producer, daemon=True).start()
     threads = [threading.Thread(target=worker, daemon=True) for _ in range(args.threads)]
     for thread in threads:
         thread.start()
     while any(thread.is_alive() for thread in threads):
-        time.sleep(5)
+        time.sleep(min(5.0, max(0.2, deadline - time.time())) if deadline else 5.0)
         if hits:
+            break
+        if deadline and time.time() >= deadline:
+            stop.set()
+            print("time cap reached (%.0fs); stopping scan cleanly" % args.max_seconds, flush=True)
             break
         with lock:
             done = sent[0]
