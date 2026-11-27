@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 import tarfile
 import threading
+import time
 
 import docker
 from docker.errors import APIError, DockerException, NotFound
@@ -47,14 +49,24 @@ class ContainerManager:
             self._start_existing(name)
             return name
         LOG.info("creating container project=%s container=%s image=%s", project_id, name, self._config.image)
+        run_kwargs: dict[str, object] = {
+            "detach": True,
+            "name": name,
+            "network_mode": self._config.network_mode,
+            "cap_add": self._config.cap_add or None,
+            "init": self._config.init,
+        }
+        if self._config.mem_limit:
+            run_kwargs["mem_limit"] = self._config.mem_limit
+        if self._config.cpu_limit is not None:
+            run_kwargs["nano_cpus"] = int(self._config.cpu_limit * 1_000_000_000)
+        if self._config.pids_limit is not None:
+            run_kwargs["pids_limit"] = self._config.pids_limit
         try:
             self._client.containers.run(
                 self._config.image,
                 ["sleep", "infinity"],
-                detach=True,
-                name=name,
-                network_mode=self._config.network_mode,
-                cap_add=self._config.cap_add or None,
+                **run_kwargs,
             )
             LOG.info("created container project=%s container=%s", project_id, name)
             return name
@@ -97,6 +109,8 @@ class ContainerManager:
             return True
         container = self._require_container(name)
         if self._config.completed_action == "remove":
+            if self._config.archive_dir:
+                self._archive_container_summary(project_id, container)
             LOG.info("removing completed project container project=%s container=%s", project_id, name)
             try:
                 container.remove(force=True)
@@ -121,6 +135,21 @@ class ContainerManager:
     def cleanup_stopped(self, project_id: str) -> bool:
         name = self.container_name(project_id)
         state = self.inspect_state(name)
+        if state is None:
+            return True
+        if self._config.completed_action == "remove":
+            container = self._require_container(name)
+            if self._config.archive_dir:
+                self._archive_container_summary(project_id, container)
+            LOG.info("removing stopped project container project=%s container=%s", project_id, name)
+            try:
+                container.remove(force=True)
+            except NotFound:
+                return True
+            except DockerException as exc:
+                LOG.warning("failed to remove stopped project container=%s error=%s", name, exc)
+                return False
+            return self.inspect_state(name) is None
         if state != "running":
             return True
         LOG.info("stopping stopped project container project=%s container=%s", project_id, name)
@@ -192,7 +221,32 @@ class ContainerManager:
                 ]
             )
         argv.extend(command)
-        return ManagedProcess(container, argv, env)
+        return ManagedProcess(
+            container,
+            argv,
+            env,
+            max_output_bytes=self._config.stdout_max_bytes,
+        )
+
+    def _archive_container_summary(self, project_id: str, container: Container) -> None:
+        if not self._config.archive_dir:
+            return
+        try:
+            archive_root = Path(self._config.archive_dir)
+            archive_root.mkdir(parents=True, exist_ok=True)
+            safe_id = project_id.replace("/", "-")
+            summary = {
+                "project_id": project_id,
+                "container_name": getattr(container, "name", safe_id),
+                "image_id": getattr(getattr(container, "image", None), "id", None),
+                "archived_at": time.time(),
+            }
+            (archive_root / f"{safe_id}.json").write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            LOG.warning("failed to archive container summary project=%s error=%s", project_id, exc)
 
     def write_text_file(self, container_name: str, path: str, content: str) -> None:
         archive_path, archive = self._text_file_archive(path, content)

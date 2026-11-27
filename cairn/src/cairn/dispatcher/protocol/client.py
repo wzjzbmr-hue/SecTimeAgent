@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 import logging
+import os
 import threading
 
 from pydantic import TypeAdapter
@@ -33,9 +34,10 @@ class ApiResult:
 
 
 class CairnClient:
-    def __init__(self, base_url: str, timeout: float = 10.0):
+    def __init__(self, base_url: str, timeout: float = 10.0, admin_token: str | None = None):
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._admin_token = (admin_token if admin_token is not None else os.environ.get("CAIRN_ADMIN_TOKEN", "")).strip() or None
         self._summary_adapter = TypeAdapter(list[ProjectSummary])
         self._local = threading.local()
         self._sessions: dict[int, requests.Session] = {}
@@ -128,6 +130,45 @@ class CairnClient:
             json={"from": from_ids, "description": description, "creator": creator, "worker": None},
         )
 
+    def create_project(
+        self,
+        *,
+        title: str,
+        origin: str,
+        goal: str,
+        bootstrap_enabled: bool = True,
+        hints: list[dict[str, str]] | None = None,
+    ) -> ApiResult:
+        payload: dict[str, Any] = {
+            "title": title,
+            "origin": origin,
+            "goal": goal,
+            "bootstrap_enabled": bootstrap_enabled,
+        }
+        if hints:
+            payload["hints"] = hints
+        return self._request_json("POST", "/projects", json=payload)
+
+    def update_project_status(self, project_id: str, status: str) -> ApiResult:
+        return self._request_json("PUT", f"/projects/{project_id}/status", json={"status": status})
+
+    def stop_project(self, project_id: str) -> ApiResult:
+        return self.update_project_status(project_id, "stopped")
+
+    def reopen_project(self, project_id: str, description: str, creator: str = "orchestrator") -> ApiResult:
+        return self._request_json(
+            "POST",
+            f"/projects/{project_id}/reopen",
+            json={"description": description, "creator": creator},
+        )
+
+    def add_hint(self, project_id: str, content: str, creator: str = "orchestrator") -> ApiResult:
+        return self._request_json(
+            "POST",
+            f"/projects/{project_id}/hints",
+            json={"content": content, "creator": creator},
+        )
+
     def _request_json(self, method: str, path: str, json: dict[str, Any]) -> ApiResult:
         try:
             response = self._session().request(
@@ -153,6 +194,8 @@ class CairnClient:
             return session
 
         session = requests.Session()
+        if self._admin_token:
+            session.headers["Authorization"] = f"Bearer {self._admin_token}"
         adapter = HTTPAdapter(pool_connections=64, pool_maxsize=64, pool_block=False)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
