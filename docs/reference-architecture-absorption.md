@@ -1,6 +1,6 @@
 # 同类开源攻防智能体对比与可吸收优势归档
 
-本文档基于对 `BaaRai/ARTEX`、`RuoJi6/ARTEX` 与 `Team-intN18-SoybeanSeclab/prtseek` 源码的实地核查，系统对比它们与当前 **SecTimeAgent**（基于 `oritera/Cairn` 深度加固）在实际全自主多题演练/攻防场景中的架构差异，并沉淀出**可低成本、低风险直接吸收进 SecTimeAgent 的高价值机制**与落地路线图。
+本文档基于对 `BaaRai/ARTEX`、`RuoJi6/ARTEX`、`Team-intN18-SoybeanSeclab/prtseek` 以及 `oritera/Cairn` 近期活跃 Fork 与衍生项目源码的实地核查，系统对比它们与当前 **SecTimeAgent**（基于 `oritera/Cairn` 深度加固）在实际全自主多题演练/攻防场景中的架构差异，并沉淀出**可低成本、低风险直接吸收进 SecTimeAgent 的高价值机制**与落地路线图。
 
 ---
 
@@ -113,20 +113,112 @@
 
 ---
 
-## 三、推荐实施优先级（按投入产出比排序）
+## 三、`oritera/Cairn` 近期活跃 Fork / 衍生项目调研与可吸收优势（优势 8–12）
 
-| 优先级 | 吸收项 | 改动范围 | 预计耗时 | 风险等级 |
-| --- | --- | --- | --- | --- |
-| **P0（立刻可做）** | 优势 1 + 优势 2 + 优势 5：Prompt 升级（Flag 收敛链 + 7 题型检查单 + `[DEAD_ENDS]` 规范 + `/tmp/exp_*` 隔离） | `prompts/competition/*.md`、`CLAUDE.md`、`AGENTS.md` | 20 分钟 | 极低 |
-| **P0（立刻可做）** | 优势 4：单题双路并发 + 异构国产旗舰双 Worker（`kimi-k3.1-pro-highspeed` + `glm-5.3` / `qwen4-max`） | `config/dispatch.competition.example.yaml`、`reason.md` | 15 分钟 | 极低 |
-| **P1（赛前可选）** | 优势 3：调度层连续无进展 fact 停滞检测与自动 `[STALL_WARNING]` 注入 | `cairn/src/cairn/dispatcher/scheduler/loop.py` + 单测 | 1 小时 | 低 |
-| **P1（按需核查）** | 优势 6：检查离线镜像无头浏览器支持并写入 `CLAUDE.md`（按盘容决定是否增量预装） | `worker/Dockerfile.deployed`、`CLAUDE.md` | 30 分钟 | 低–中（关注盘容） |
-| **P2（后续演进）** | 优势 7：代理层按项目请求次数预算 + `ARTEX` 式资产去重图（适合长周期多主机渗透） | `bench/token_proxy.py`、`cairn/server/` | 1–2 天 | 中 |
+在排查上游 `oritera/Cairn`（最新提交 `2026-09-07`）之后所有存在实质代码修改的 Fork 及非 Fork 衍生仓库后，筛选出 **7 个高度贴合国内全自主攻防演练痛点的改版**（以及 1 条供应链安全警示）。
+
+### 3.1 重点魔改项目全景对比
+
+| 仓库 | 最新提交 | 核心定位与特色 | 最值得关注的设计 |
+| --- | --- | --- | --- |
+| [guaidao2/Cairn-Local](https://github.com/guaidao2/Cairn-Local) | `2026-11-10` | 明确面向本地 Kali 虚拟机实战/演练的去 Docker 改版 | 内置 Python 子进程 Agent 循环、`read` 工具原生读图缩放（≤2048px / ≤3MB）、DeepSeek 思考链 `max_tokens=32768` 防截断、`reason` 结构化图查询工具 |
+| [Shennnnnnnnnn/Cairn](https://github.com/Shennnnnnnnnn/Cairn) | `2026-10-19` | TypeScript 重写的多宿主轻量黑板（公开前移除了演练专用流程） | 18 组难题 A/B 验证（默认单会话复用 + 按需独立 Explore 省 ~39% Token）、宿主外部验收 `CAIRN_VERIFY_COMMAND`、截止时间预留 `CAIRN_DEADLINE`、`reopen` + `epoch` 隔离 |
+| [Marven11/Cairn](https://github.com/Marven11/Cairn) | `2026-11-08` | 多目标建模与在线运维增强版 | 原生**多 Goal 模型**（`Allow multiple goals`）与图状态自动推导完成、Reasoner 推荐下一条 Intent、Dispatcher 热重载、单独停止异常 Worker |
+| [xiaoju111a/Cairn](https://github.com/xiaoju111a/Cairn) | `2026-10-30` | 验证增强与长局防上下文爆炸版 | 新增独立 `verify` 阶段与 `intelligence.py` CVE 情报库、`graph overview` 限制 Explore/Verify 上下文长度、失败退避重试、修复 ClaudeCode 健康检查提示词 |
+| [86cloudyun-afk/Cairn](https://github.com/86cloudyun-afk/Cairn) | `2026-10-25`（`11-12` 推送） | 会话恢复与工件清单持久化版 | **一次性自动恢复缺失的 Claude 会话**（解决 `claude -r` 偶发 session-not-found）、工作流计划与产物清单写入 Worker 私有快照、任务级网络控制 |
+| [bronezppg-arch/Cairn](https://github.com/bronezppg-arch/Cairn) | `2026-10-28`（`11-11` 推送） | 国产大模型适配与内网横向可视化版 | 明确规避 **GLM 推理模型思考链吃光输出导致 JSON 为空**（结构化阶段禁用 `thinking` 并拉高输出预算至 `16384`）、自动发现 GLM/Qwen/DeepSeek 接口、Cytoscape 内网拓扑图 |
+| [LongSang01/Cairn-E](https://github.com/LongSang01/Cairn-E) & [Rabbit0007/Rabbit](https://github.com/Rabbit0007/Rabbit)（衍生 [mastercho/Rabbit](https://github.com/mastercho/Rabbit)） | `2026-11-09` / `2026-11-26` | 融合 `Cairn-Y` 与 `ARTEX` 的执行层抗毁改版 | `Cairn-E`：默认步骤并行 + 非对称 `exclusive` 锁（爆破/撞库类才串行）、M-Token 硬预算与越界主机拦截；`Rabbit`：Fail-closed JSON 解析 + 带语法诊断的定向修复环、Worker 预装 JDK（`jdb`/`javap`）、单命令 90s 超时 + 600s 执行预算（含 60s 收尾预留）；`mastercho/Rabbit` 默认关闭会锁死在 `needs_attention` 的人工介入态 |
+
+> **供应链安全警示**：排查中发现某近期推送的 Fork `domserviceeu/Cairn` 在 worker 镜像构建阶段注入了可疑动态载荷（`CRED-1028 v2`），**严禁拉取、复用或构建该仓库代码**。
 
 ---
 
-## 四、参考仓库
+### 优势 8：国产推理模型 JSON 截断防御与坏 JSON 定向修复环（源自 `bronezppg-arch/Cairn`、`guaidao2/Cairn-Local`、`Rabbit0007/Rabbit`）
 
-- [BaaRai/ARTEX](https://github.com/BaaRai/ARTEX) — 重点参考：双图记忆（资产图 + 探索图）、多 LLM 轮换 (`llmpool`)、Prompt 注入隔离。
-- [RuoJi6/ARTEX](https://github.com/RuoJi6/ARTEX) — 重点参考：单条命令内存与超时保护（cgroup v2 / RSS 采样）、Streamable HTTP / SSE MCP 双协议接入。
-- [Team-intN18-SoybeanSeclab/prtseek](https://github.com/Team-intN18-SoybeanSeclab/prtseek) — 重点参考：`agent/ctf.go`（Flag 收敛链与题型方法卡）、`agent/research_progress.go`（哈希签名停滞自检与 `research_experiment`）、`agent/research_memory.go`（压缩状态重注与失败路线记录）、`agent/run_budget.go`（父子共享调用预算）、`Dockerfile`（离线 Playwright + Chromium）。
+- **原方案设计**：
+  - `bronezppg-arch/Cairn` 与 `guaidao2/Cairn-Local` 均在实战中验证了国产推理模型（GLM / DeepSeek 等）的高频故障：**思考链（thinking/reasoning）会耗尽默认输出 Token 预算，导致结构化阶段（`reason` / `conclude`）返回空文本或截断 JSON**；解法是拉高 `max_tokens`（`16384`–`32768`）并在纯结构化输出阶段按需关闭深度思考。
+  - `Rabbit0007/Rabbit` 采用 **Fail-closed JSON 解析 + 带语法诊断的定向修复环**：拒绝围栏/重复键/尾部残渣，但首次解析失败不直接判整步作废，而是附带具体解析错误向模型发起 1 次定向修复重试。
+- **SecTimeAgent 落地点**：
+  - 在 `cairn/src/cairn/dispatcher/contracts.py` 与 `tasks/common.py` 中，为 `reason` / `bootstrap_conclude` / `explore_conclude` 增加 **JSON 解析失败后的 1 次带错因定向修复重试**；
+  - 在 `bench/token_proxy.py` 及 `config/dispatch*.yaml` 核对各国产路由（`kimi-k3.1-pro-highspeed` / `glm-5.3` / `qwen4-max`）的输出上限与思考参数，避免因思考预算耗尽触发空响应。
+- **收益 / 成本**：**极高收益 / 低成本**（直接挽救跑了 5–10 分钟却因单个 JSON 语法错误作废的高价值步骤）。
+
+---
+
+### 优势 9：Claude 会话丢失一次性自愈 + 失败退避重试 + 无人值守防卡死（源自 `86cloudyun-afk/Cairn`、`xiaoju111a/Cairn`、`mastercho/Rabbit`）
+
+- **原方案设计**：
+  - `86cloudyun-afk/Cairn` 在 `tasks/explore.py` 中识别 Claude CLI `claude -r` 明确报会话不存在（missing conversation）的场景，自动执行**一次性新会话回退恢复**（携带已有摘要上下文），避免同一步骤反复崩溃。
+  - `xiaoju111a/Cairn` 在 `scheduler/loop.py` 中对失败任务施加**退避延迟（delay failed retries）**，防止上游接口短暂抖动或限频时在几秒内连续打光重试次数与 RPM 配额。
+  - `mastercho/Rabbit` 在 `2026-11-26` 将会阻塞于人工确认态 `needs_attention` 的 `step_recovery` 改回默认关闭，确保无人值守运行时失败步骤可被释放并重新调度。
+- **SecTimeAgent 落地点**：
+  - 在 `cairn/src/cairn/dispatcher/workers/adapters/claudecode.py` 与 `tasks/explore.py` 增加 missing-session 检测与一次性新建会话降级；
+  - 在 `cairn/src/cairn/dispatcher/scheduler/loop.py` 为连续失败的 Intent 增加指数/固定退避冷却（如 `15s -> 45s`），并确保任何恢复逻辑都不引入需要人工点击的永久阻塞态。
+- **收益 / 成本**：**高收益 / 低成本**（显著提升长时间全自动无人值守稳定性）。
+
+---
+
+### 优势 10：长探索阶段用 Graph Overview 限制上下文体积（源自 `xiaoju111a/Cairn`）
+
+- **原方案设计**：
+  - `xiaoju111a/Cairn` 在 `tasks/common.py` 与 `tasks/explore.py` 中引入有界图概览（`graph overview`），在项目执行到中后期、Fact 数量快速增长时，仅向 Explore/Verify 注入压缩后的图谱结构与强相关节点，避免上下文线性膨胀拖慢响应或触发上下文截断。
+- **SecTimeAgent 落地点**：
+  - 在 `cairn/src/cairn/dispatcher/tasks/common.py` 中为 `explore` 上下文构建增加 Fact 数量/字符数阈值：超过阈值时自动切换为“高优先级 Fact（含 `[PROGRESS]`/`[FOOTHOLDS]`/`[DEAD_ENDS]`）+ 其余节点一行摘要”的有界视图。
+- **收益 / 成本**：**高收益（多 Flag 长局必备）/ 低成本**。
+
+---
+
+### 优势 11：Worker 工具链补齐 JDK（`jdb`/`javap`）与多模态图片预处理辅助（源自 `Rabbit0007/Rabbit`、`guaidao2/Cairn-Local`）
+
+- **原方案设计**：
+  - `Rabbit0007/Rabbit` 在 Worker 容器内预装 JDK 工具链，遇到 **Java JDWP 调试端口、反序列化链分析或 `.class`/`.jar` 逆向** 时可直接用 `jdb` / `javap` 破局。
+  - `guaidao2/Cairn-Local` 为读取图片实现 MIME 探测、自动缩放（≤2048px）与体积压缩（≤3MB），提升 **Misc / 隐写 / 验证码 / Web 截图** 题型处理能力。
+- **SecTimeAgent 落地点**：
+  - 核查当前 `cairn-worker:tools-ready-20261125` 镜像是否已具备 `jdb`、`javap`、`tesseract`、`zbarimg` 及 Python `Pillow`；
+  - 在 `worker/tools/` 增加轻量化图片信息摘要/缩略图转换小脚本（或在 `CLAUDE.md` 中指明可用图像与 Java 调试工具路径），在 50 GB 宿主机磁盘预算允许前提下按需补齐缺失工具。
+- **收益 / 成本**：**中高收益（拓宽题型覆盖面）/ 极低成本**。
+
+---
+
+### 优势 12：多 Goal 原生建模 + 非对称 `exclusive` 并行锁（源自 `Marven11/Cairn`、`LongSang01/Cairn-E`、`Shennnnnnnnnn/Cairn`）
+
+- **原方案设计**：
+  - `Marven11/Cairn` 将项目模型从单 Goal 升级为**多 Goal**，并根据各 Goal 状态自动推导项目完成；`Shennnnnnnnnn/Cairn` 进一步引入 `epoch` 隔离与宿主验收回调。
+  - `LongSang01/Cairn-E` 在并行执行多个步骤时，仅对带有 `exclusive` 标记（或命中爆破/密码喷洒/撞库/批量登录等高冲突关键词）的步骤加独占锁，其余信息收集与静态分析步骤全部默认并行。
+- **SecTimeAgent 落地点**：
+  - **短期（保持低风险）**：沿用当前已验证通过的 `race_bridge` + `/reopen` 多 Flag 门禁，在 `reason.md` 中约定“高冲突爆破步骤不同时派发、只读/静态分析步骤双路并行”；
+  - **中长期（架构演进）**：在 `cairn/server/` 引入多 Goal 数据模型与非对称 `exclusive` 调度锁，并参考 `Shennnnnnnnnn/Cairn` 的 A/B 评测方法，实测单会话复用与多会话并发的 Token/解题率折中点。
+- **收益 / 成本**：**高长期收益 / 中高改造成本（建议归入 P2 演进）**。
+
+---
+
+## 四、推荐实施优先级（按投入产出比排序）
+
+| 优先级 | 吸收项 | 来源 | 改动范围 | 预计耗时 | 风险等级 |
+| --- | --- | --- | --- | --- | --- |
+| **P0（立刻可做）** | 优势 1 + 优势 2 + 优势 5：Prompt 升级（Flag 收敛链 + 7 题型检查单 + `[DEAD_ENDS]` 规范 + `/tmp/exp_*` 隔离） | `prtseek` | `prompts/competition/*.md`、`CLAUDE.md`、`AGENTS.md` | 20 分钟 | 极低 |
+| **P0（立刻可做）** | 优势 4：单题双路并发 + 异构国产旗舰双 Worker（`kimi-k3.1-pro-highspeed` + `glm-5.3` / `qwen4-max`） | `prtseek` / `ARTEX` | `config/dispatch.competition.example.yaml`、`reason.md` | 15 分钟 | 极低 |
+| **P0（强烈推荐）** | 优势 8：国产推理模型 JSON 截断防御（输出上限/思考参数校验）+ 坏 JSON 带错因定向修复重试 | `bronezppg` / `guaidao2` / `Rabbit` | `dispatcher/contracts.py`、`tasks/common.py`、`token_proxy.py` + 单测 | 45 分钟 | 低 |
+| **P0（强烈推荐）** | 优势 9：Claude `claude -r` 会话丢失一次性自愈 + 失败退避重试（无人值守不卡人工态） | `86cloudyun` / `xiaoju111a` / `mastercho` | `adapters/claudecode.py`、`tasks/explore.py`、`scheduler/loop.py` + 单测 | 45 分钟 | 低 |
+| **P1（可选强化）** | 优势 3 + 优势 10：调度层连续无进展 fact 停滞检测（`[STALL_WARNING]`）+ 长局 `graph overview` 上下文限长 | `prtseek` / `xiaoju111a` | `scheduler/loop.py`、`tasks/common.py` + 单测 | 1.5 小时 | 低 |
+| **P1（按需核查）** | 优势 6 + 优势 11：核查离线镜像无头浏览器（Playwright/Chromium）、JDK（`jdb`/`javap`）与图片辅助工具并写入 `CLAUDE.md` | `prtseek` / `Rabbit` / `guaidao2` | `worker/Dockerfile.deployed`、`worker/tools/`、`CLAUDE.md` | 40 分钟 | 低–中（关注盘容） |
+| **P2（后续演进）** | 优势 7 + 优势 12：代理层按项目请求次数预算 + 多 Goal 原生建模 + 非对称 `exclusive` 锁 + 资产拓扑图 | `ARTEX` / `Marven11` / `Cairn-E` / `bronezppg` / `Shennnnnnnnnn` | `bench/token_proxy.py`、`cairn/server/`、`scheduler/` | 2–3 天 | 中 |
+
+---
+
+## 五、参考仓库
+
+### 1. 同类攻防智能体框架
+- [BaaRai/ARTEX](https://github.com/BaaRai/ARTEX) — 双图记忆（资产图 + 探索图）、多 LLM 轮换 (`llmpool`)、Prompt 注入隔离。
+- [RuoJi6/ARTEX](https://github.com/RuoJi6/ARTEX) — 单条命令内存与超时保护（cgroup v2 / RSS 采样）、Streamable HTTP / SSE MCP 双协议接入。
+- [Team-intN18-SoybeanSeclab/prtseek](https://github.com/Team-intN18-SoybeanSeclab/prtseek) — `agent/ctf.go`（Flag 收敛链与题型方法卡）、`agent/research_progress.go`（哈希签名停滞自检与 `research_experiment`）、`agent/research_memory.go`（压缩状态重注与失败路线记录）、`agent/run_budget.go`（父子共享调用预算）、`Dockerfile`（离线 Playwright + Chromium）。
+
+### 2. `oritera/Cairn` 活跃 Fork 与衍生项目
+- [guaidao2/Cairn-Local](https://github.com/guaidao2/Cairn-Local) — 去 Docker 本地子进程执行、多模态图片读取缩放、推理模型 `max_tokens=32768` 防截断。
+- [Shennnnnnnnnn/Cairn](https://github.com/Shennnnnnnnnn/Cairn) — 单会话复用 vs 多会话 A/B 基准、宿主验收门禁、截止时间预留与 `epoch` 隔离。
+- [Marven11/Cairn](https://github.com/Marven11/Cairn) — 多 Goal 原生建模与图推导完成、Dispatcher 热重载与单 Worker 停止。
+- [xiaoju111a/Cairn](https://github.com/xiaoju111a/Cairn) — 独立 `verify` 阶段与 CVE 情报、`graph overview` 长上下文限长、失败退避重试。
+- [86cloudyun-afk/Cairn](https://github.com/86cloudyun-afk/Cairn) — `claude -r` 缺失会话一次性恢复、工作流计划与产物清单持久化。
+- [bronezppg-arch/Cairn](https://github.com/bronezppg-arch/Cairn) — 国产推理模型关闭 thinking 防空 JSON、自动模型发现与 Cytoscape 内网拓扑图。
+- [LongSang01/Cairn-E](https://github.com/LongSang01/Cairn-E) — 步骤默认并行 + 非对称 `exclusive` 锁、M-Token 预算与范围硬校验。
+- [Rabbit0007/Rabbit](https://github.com/Rabbit0007/Rabbit) / [mastercho/Rabbit](https://github.com/mastercho/Rabbit) — Fail-closed JSON 诊断修复环、JDK（`jdb`/`javap`）Worker 镜像、单命令 90s 超时与无人值守防人工态阻塞。
