@@ -332,7 +332,7 @@ class DispatcherLoop:
                 sorted(running_intent_ids),
             )
         if unclaimed_intents:
-            # FIFO: ??????????????????????????
+            # FIFO: dispatch oldest unclaimed intent first
             oldest = min(unclaimed_intents, key=lambda i: i.created_at)
             export_yaml = self.client.export_project(summary.id)
             return self._dispatch_explore(project, export_yaml, oldest)

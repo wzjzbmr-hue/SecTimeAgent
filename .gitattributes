@@ -1,0 +1,5 @@
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+worker/deployed-rootfs/** text eol=lf
+deploy/** text eol=lf

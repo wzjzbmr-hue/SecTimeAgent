@@ -16,6 +16,7 @@ import hashlib
 import http.client
 import itertools
 import queue
+import ssl
 import sys
 import threading
 import time
@@ -94,7 +95,9 @@ def main():
         return 0
 
     parts = urlsplit(args.url)
-    host, port = parts.hostname, parts.port or (443 if parts.scheme == "https" else 80)
+    is_https = parts.scheme.lower() == "https"
+    host, port = parts.hostname, parts.port or (443 if is_https else 80)
+    ssl_ctx = ssl._create_unverified_context() if is_https else None
     work = queue.Queue(maxsize=20000)
     hits, stop, sent = [], threading.Event(), [0]
     lock = threading.Lock()
@@ -115,14 +118,16 @@ def main():
                 return
             path, phrase = item
             try:
-                if args.max_candidates:
-                    with lock:
-                        if sent[0] >= args.max_candidates:
-                            stop.set()
-                            return
-                        sent[0] += 1
+                with lock:
+                    if args.max_candidates and sent[0] >= args.max_candidates:
+                        stop.set()
+                        return
+                    sent[0] += 1
                 if connection is None:
-                    connection = http.client.HTTPConnection(host, port, timeout=args.timeout)
+                    if is_https:
+                        connection = http.client.HTTPSConnection(host, port, timeout=args.timeout, context=ssl_ctx)
+                    else:
+                        connection = http.client.HTTPConnection(host, port, timeout=args.timeout)
                 connection.request("GET", path)
                 response = connection.getresponse()
                 body = response.read(400)
@@ -134,12 +139,8 @@ def main():
                         hits.append((path, phrase, response.status, body))
                     stop.set()
                     return
-                with lock:
-                    sent[0] += 1
             except Exception:
-                # A dropped or failed request is not an answer. Count it and let the queue move on.
-                with lock:
-                    sent[0] += 1
+                # A dropped or failed request is not an answer. Counted above; reconnect and move on.
                 try:
                     if connection is not None:
                         connection.close()

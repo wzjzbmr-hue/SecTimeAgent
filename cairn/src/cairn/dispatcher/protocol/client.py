@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 import requests
 from requests.adapters import HTTPAdapter
 
-from cairn.server.models import Intent, ProjectDetail, ProjectSummary, Settings
+from cairn.server.models import ProjectDetail, ProjectSummary, Settings
 
 LOG = logging.getLogger(__name__)
 

@@ -84,7 +84,7 @@ routes:
       - glm_coding
 
   glm_coding:
-    # 优先级 5（备援）：智谱官方 GLM Coding Plan（限额 2026-11-30 14:50 重置，赛前自动可用）
+    # 优先级 5（备援）：智谱官方 GLM Coding Plan
     url: https://open.bigmodel.cn/api/anthropic
     api_key_env: GLM_CODING_API_KEY
     auth_header: both

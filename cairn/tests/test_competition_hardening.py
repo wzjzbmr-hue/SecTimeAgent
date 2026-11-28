@@ -97,6 +97,7 @@ def test_container_manager_applies_resource_limits_init_and_archives_before_remo
         image="cairn-worker:test",
         network_mode="host",
         completed_action="remove",
+        volumes=["/tmp/cairn-attachments:/tmp/cairn-attachments:ro"],
         init=True,
         mem_limit="3g",
         cpu_limit=2.5,
@@ -114,6 +115,11 @@ def test_container_manager_applies_resource_limits_init_and_archives_before_remo
     assert run_calls[0]["mem_limit"] == "3g"
     assert run_calls[0]["nano_cpus"] == 2_500_000_000
     assert run_calls[0]["pids_limit"] == 512
+    assert run_calls[0]["volumes"] == ["/tmp/cairn-attachments:/tmp/cairn-attachments:ro"]
+
+    # Exited container for stopped project MUST still need cleanup when completed_action == "remove"
+    mgr.inspect_state = lambda _name: "exited"
+    assert mgr.needs_stopped_cleanup("proj_009") is True
 
     fc = FakeContainer()
     states = iter(["running", None])

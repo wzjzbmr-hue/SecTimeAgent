@@ -71,21 +71,21 @@ cairn/
   tests/                       109 项自动化单元与端到端契约测试（零真实模型费用）
 bench/
   token_proxy.py               宿主机 Key 托管、Token 记账与国产白名单主备切换代理
-  mock_race_platform.py        1:1 仿真官方 7 接口平台（分阶段放题、3 req/s 限流、多 Flag、scene_status=20 注入）
-  submit_server.py             本地多 Flag 判分与状态持久化服务
+  mock_race_platform.py        1:1 仿真官方 7 接口平台 + MCP + 动态 Docker 靶机 + 实时看板
+  dashboard.html               本地零构建实时观测看板
 worker/
-  Dockerfile.deployed          基于 tools-ready 离线镜像增量叠加竞赛自研脚本
-  deployed-rootfs/             submit-flag、nmap 包装、ics_client.py、pcap_summary.py、hashpath.py、CLAUDE.md、AGENTS.md
+  Dockerfile.deployed          基于 tools-ready 离线镜像增量叠加竞赛脚本并清理遗留杂项
+  Dockerfile.slim              多阶段压平瘦身镜像（剔除云 CLI/.git/截图/缓存/GPU 驱动，释放 ~8+ GB）
+  deployed-rootfs/             submit-flag、nmap 包装、ics_client.py、pcap_summary.py、hashpath.py、CLAUDE.md
 config/
   dispatch.competition.example.yaml  8C16G50G 比赛调度配置示例（零真实 Key）
   proxy.competition.example.yaml     国产旗舰主备路由配置示例（零真实 Key）
-  dispatch.ubuntu.example.yaml       原 Ubuntu 基线配置示例
 deploy/
   preflight.py                 零依赖赛前一键自检脚本（可直接宿主机 python3 运行）
   diagnose.sh                  赛中 5 秒快速诊断脚本
   cairn-race.service           正式赛 systemd 服务单元
   cairn-race.timer             定时自动拉起任务定时器
-compose.ubuntu.yaml            四服务宿主网络部署配置（server / proxy / submit / dispatcher）
+compose.ubuntu.yaml            三服务宿主网络部署配置（server / proxy / dispatcher）
 compose.build.yaml             从源码构建 cairn-app 覆盖配置
 compose.dev.yaml               挂载源码热调试覆盖配置
 ```
@@ -129,8 +129,11 @@ sha256sum cairn-worker-tools-ready-20261125.tar.gz
 gunzip -c cairn-worker-tools-ready-20261125.tar.gz | docker load
 # 原 OCI 镜像身份参考：sha256:81e1b018223a72bfa67b51bddf2a0df8126198a3b7530a1b524e651af6a83cf5
 
-# 在 tools-ready 之上增量叠加竞赛脚本、submit-flag、nmap 包装与工控工具
+# 在 tools-ready 之上增量叠加竞赛脚本、submit-flag、nmap 包装与工控工具（共享底层，秒建）
 docker build -f worker/Dockerfile.deployed -t cairn-worker:competition .
+
+# 或构建压平瘦身版（释放 ~8+ GB 磁盘空间，适合 50 GB 比赛机）
+docker build -f worker/Dockerfile.slim -t cairn-worker:competition-slim .
 ```
 
 ### 3. 配置本机密钥与代理（仅存宿主机，不入库）
@@ -160,8 +163,8 @@ GLM_CODING_API_KEY=<智谱 Coding Plan Key>
 ```bash
 docker build -t cairn-app:ubuntu-baseline-dev .
 docker tag cairn-app:ubuntu-baseline-dev cairn-app:migration-20261119
-# 仅启动 server / proxy / submit（按需再启动 dispatcher，避免闲置消耗模型额度）
-docker compose -f compose.ubuntu.yaml up -d server proxy submit
+# 仅启动 server / proxy（按需再启动 dispatcher，避免闲置消耗模型额度）
+docker compose -f compose.ubuntu.yaml up -d server proxy
 ```
 
 ### 5. 赛前一键自检与 `08:30` 自动开赛
@@ -202,12 +205,12 @@ bash deploy/diagnose.sh
 
 ## 本地开发与零费用验证
 
-### 运行全量单元测试（109 项，零模型消耗）
+### 运行全量单元测试（零模型消耗）
 
 ```bash
-docker compose -f compose.ubuntu.yaml -f compose.build.yaml -f compose.dev.yaml \
-  run --rm --no-deps --init server \
-  /cairn/.venv/bin/python -m pytest /cairn/tests -q -p no:cacheprovider
+docker run --rm --init -v "$(pwd):/workspace" -w /workspace \
+  -e PYTHONPATH=/workspace/cairn/src cairn-app:ubuntu-baseline-dev \
+  /cairn/.venv/bin/python -m pytest /workspace/cairn/tests -q -p no:cacheprovider
 ```
 
 或在宿主机使用 `uv` 运行：

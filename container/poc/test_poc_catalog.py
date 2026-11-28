@@ -1,7 +1,6 @@
 """Behavior checks: lock integrity, non-execution, quarantine and offline lookup."""
 import argparse
 import contextlib
-import hashlib
 import io
 import json
 from pathlib import Path

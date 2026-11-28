@@ -8,7 +8,10 @@ Type=simple
 WorkingDirectory=/opt/SecTimeAgent
 EnvironmentFile=/opt/SecTimeAgent/config/race.env
 ExecStartPre=/usr/bin/docker compose -f compose.ubuntu.yaml -f compose.build.yaml up -d --wait server proxy dispatcher
-ExecStart=/usr/bin/docker compose -f compose.ubuntu.yaml -f compose.build.yaml run --rm --no-deps server /cairn/.venv/bin/cairn race --race-base-url ${RACE_BASE_URL} --agent-token ${RACE_AGENT_TOKEN} --cairn-url http://127.0.0.1:8000 --max-scenes 2 --max-attachments 2 --start-at ${RACE_START_AT} --end-at ${RACE_END_AT}
+ExecStart=/usr/bin/docker compose -f compose.ubuntu.yaml -f compose.build.yaml run --rm --no-deps \
+  -e RACE_BASE_URL -e RACE_AGENT_TOKEN -e CAIRN_ADMIN_TOKEN -e RACE_START_AT -e RACE_END_AT \
+  -v /tmp/cairn-attachments:/tmp/cairn-attachments \
+  server /cairn/.venv/bin/cairn race --cairn-url http://127.0.0.1:8000 --max-scenes 2 --max-attachments 2 --state-file /workspace/runtime/race-orchestrator-state.json
 Restart=on-failure
 RestartSec=10
 

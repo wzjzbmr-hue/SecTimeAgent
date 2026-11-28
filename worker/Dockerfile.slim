@@ -1,0 +1,124 @@
+# Build context: repository root.
+# Produces a flattened, slimmed competition worker image (~7.5-9 GB vs 17.2 GB)
+# by stripping offline-unusable bloat (cloud CLIs, .git packs, PoC screenshots,
+# GPU drivers, duplicate Chromium/agents, caches, docs/locales, heavy unused SDKs)
+# while preserving 100% of competition tools, PoC scripts/text, and Claude Code.
+#
+# Usage:
+#   docker build -f worker/Dockerfile.slim -t cairn-worker:competition-slim .
+ARG BASE_IMAGE=cairn-worker:tools-ready-20261125
+FROM ${BASE_IMAGE} AS cleaner
+
+USER root
+
+# 1. Remove legacy slop, leftover debug files, and workspace artifacts
+RUN rm -rf \
+    /home/kali/workspace/.claude/skills/tsec-actions \
+    /home/kali/workspace/.agents/skills/tsec-actions \
+    /home/kali/workspace/boofuzz-results \
+    /opt/cairn-race \
+    /opt/cairn-poc/test_nuclei_random.py \
+    /opt/cairn-poc/test_poc_catalog.py \
+    /tmp/* /var/tmp/*
+
+# 2. Remove package manager caches & logs (~365 MB)
+RUN rm -rf \
+    /root/.npm /root/.cache \
+    /home/kali/.cache/pip /home/kali/.cache/ms-playwright /home/kali/.cache/goimports \
+    /var/cache/apt/* /var/lib/apt/lists/* /var/log/*
+
+# 3. Remove .git directories & visual screenshots/media from offline PoC/knowledge repos (~2.7 GB)
+#    (poc_catalog only indexes text files; all .md/.py/.yaml/.sh/.txt PoCs remain intact)
+RUN find /home/kali/pocs /home/kali/knowledges /home/kali/.local/nuclei-templates \
+      -name ".git" -type d -prune -exec rm -rf {} + \
+ && find /home/kali/pocs /home/kali/knowledges -type f \( \
+      -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" \
+      -o -iname "*.bmp" -o -iname "*.webp" -o -iname "*.mp4" -o -iname "*.ico" \
+    \) -delete
+
+# 4. Remove offline-unusable cloud CLIs/SDKs & unused agent CLIs (~1.3 GB)
+RUN rm -rf \
+    /usr/local/bin/cloudfox \
+    /usr/local/bin/aliyun \
+    /home/kali/.local/lib/python*/site-packages/tencentcloud* \
+    /home/kali/.local/lib/python*/site-packages/tccli* \
+    /home/kali/.local/lib/python*/site-packages/awscli* \
+    /home/kali/.local/lib/python*/site-packages/botocore* \
+    /home/kali/.local/lib/python*/site-packages/s3transfer* \
+    /home/kali/.local/lib/python*/site-packages/QcloudApi* \
+    /usr/local/lib/node_modules/@openai \
+    /usr/local/lib/node_modules/@mariozechner \
+    /usr/local/lib/node_modules/@playwright \
+    /usr/local/bin/codex /usr/local/bin/pi /usr/local/bin/playwright-cli
+
+# 5. Trim oversized unusable brute-force lists in /opt/seclists (~650 MB)
+#    (keeps rockyou, Default-Credentials, DirBuster-medium, raft, common/big web lists, JWT secrets)
+RUN rm -rf \
+    /opt/seclists/Passwords/Leaked-Databases \
+    /opt/seclists/Passwords/Wikipedia \
+    /opt/seclists/Web-Content/dutch \
+    /opt/seclists/Usernames/xato-net-10-million-usernames.txt \
+    /opt/seclists/Usernames/xato-net-10-million-usernames-dup.txt \
+ && find /opt/seclists/Passwords/Common-Credentials -type f -size +5M -delete
+
+# 6. Purge heavy server/GUI/GPU/cross-compiler packages not needed in headless competition worker (~3.5+ GB)
+#    IMPORTANT: Filter to actually-installed packages so apt-get never aborts on missing names,
+#    and NEVER pass --auto-remove (kali-linux-headless is a metapackage; keeping explicit purge
+#    preserves 100% of core Kali pentest tools).
+RUN PKGS="" && for p in \
+      kali-linux-headless \
+      dotnet-sdk-6.0 dotnet-runtime-6.0 powershell powershell-empire \
+      oracle-instantclient-basic \
+      chromium chromium-common \
+      mariadb-server mariadb-server-core \
+      postgresql postgresql-17 postgresql-16 \
+      gcc-mingw-w64-x86-64-win32 gcc-mingw-w64-i686-win32 \
+      gcc-mingw-w64-x86-64-win32-runtime gcc-mingw-w64-i686-win32-runtime \
+      mingw-w64-x86-64-dev mingw-w64-i686-dev mingw-w64-common \
+      llvm-21-dev llvm-21 libclang-rt-21-dev \
+      mesa-vulkan-drivers libigdfcl2 libigc2 \
+      coreboot-utils; do \
+      dpkg-query -W -f='${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" && PKGS="$PKGS $p"; \
+    done \
+ && if [ -n "$PKGS" ]; then DEBIAN_FRONTEND=noninteractive apt-get purge -y $PKGS; fi \
+ && rm -rf /var/lib/mariadb /var/lib/postgresql /opt/microsoft /usr/share/dotnet /usr/lib/oracle \
+ && rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* \
+ && find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name 'en*' ! -name 'C*' -exec rm -rf {} + \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 7. Overlay latest competition rootfs & scripts (enforce LF line endings)
+COPY worker/deployed-rootfs/ /
+RUN sed -i 's/\r$//' \
+      /usr/local/bin/poc-catalog \
+      /usr/local/bin/uuidgen \
+      /usr/local/bin/nmap \
+      /usr/local/bin/submit-flag \
+      /opt/cairn-poc/hashpath.py \
+      /opt/cairn-poc/pcap_summary.py \
+      /opt/cairn-poc/ics_client.py \
+      /opt/cairn-poc/poc_catalog.py \
+ && cp /home/kali/workspace/CLAUDE.md /home/kali/workspace/AGENTS.md \
+ && chmod 755 /usr/local/bin/poc-catalog \
+              /usr/local/bin/uuidgen \
+              /usr/local/bin/nmap \
+              /usr/local/bin/submit-flag \
+              /opt/cairn-poc/hashpath.py \
+              /opt/cairn-poc/pcap_summary.py \
+              /opt/cairn-poc/ics_client.py \
+ && chown -R kali:kali /home/kali/workspace
+
+# 8. Flatten all layers into a single clean image to reclaim whiteout space
+FROM scratch
+COPY --from=cleaner / /
+USER root
+RUN setcap -r /usr/lib/nmap/nmap 2>/dev/null || true \
+ && setcap cap_net_raw+eip /usr/bin/tcpdump \
+ && setcap cap_net_raw+eip /usr/bin/dumpcap
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    LANG=C.UTF-8 \
+    TZ=Asia/Shanghai \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    PYTHONUNBUFFERED=1
+USER kali
+WORKDIR /home/kali/workspace
+CMD ["sleep", "infinity"]

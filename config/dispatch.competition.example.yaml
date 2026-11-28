@@ -43,6 +43,8 @@ container:
   pids_limit: 512
   stdout_max_bytes: 8388608
   archive_dir: /workspace/runtime/archives
+  volumes:
+    - /tmp/cairn-attachments:/tmp/cairn-attachments:ro
 
 common_env:
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'

@@ -21,17 +21,6 @@ ERR_INVALID_TOKEN = "AD-160019"
 ERR_PARAM_OR_MISSING = "AD-160003"
 ERR_SCENE_CREATE_FAIL = "AD-160013"
 
-NON_RETRYABLE_CODES = frozenset(
-    {
-        ERR_PARAM_OR_MISSING,
-        ERR_INVALID_TOKEN,
-        ERR_NO_SCENE,
-        ERR_DUPLICATE_FLAG,
-        ERR_SCENE_LIMIT,
-        ERR_SCENE_CREATE_FAIL,
-    }
-)
-
 WAIT_SECONDS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*秒")
 
 
@@ -272,7 +261,10 @@ class OfficialRaceClient:
         if status == 1 and info.get("scene_addresses"):
             return info
 
+        recovery_attempts = 0
+        max_recovery_attempts = 2
         if status == 20:
+            recovery_attempts += 1
             LOG.warning("scene_status=20 detected for question=%s; stopping to recover", qid)
             self.question_stop(qid)
             while time.monotonic() < deadline:
@@ -294,7 +286,18 @@ class OfficialRaceClient:
             if status == 1 and info.get("scene_addresses"):
                 return info
             if status == 20:
-                LOG.warning("scene_status=20 during start wait for question=%s; retrying stop->3->start once", qid)
+                if recovery_attempts >= max_recovery_attempts:
+                    raise RaceApiError(
+                        "SCENE_RECOVERY_EXHAUSTED",
+                        f"question {qid} repeatedly entered scene_status=20 ({recovery_attempts} recoveries)",
+                    )
+                recovery_attempts += 1
+                LOG.warning(
+                    "scene_status=20 during start wait for question=%s; retrying stop->3->start (%d/%d)",
+                    qid,
+                    recovery_attempts,
+                    max_recovery_attempts,
+                )
                 self.question_stop(qid)
                 while time.monotonic() < deadline:
                     time.sleep(poll_interval)
