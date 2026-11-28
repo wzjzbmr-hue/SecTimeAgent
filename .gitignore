@@ -16,6 +16,7 @@ bench/attachments/
 bench/challenges.local.yaml
 eval/private-challenges/
 eval/runs/
+eval/human-references/
 *.tar
 *.tar.gz
 *.zip

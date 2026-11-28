@@ -70,7 +70,11 @@ class TrackedQuestion:
     status: str = "pending"  # pending | running | solved | revisit | exhausted
     project_id: str | None = None
     started_at: float | None = None
+    started_wall_at: float | None = None
     last_progress_at: float | None = None
+    last_progress_wall_at: float | None = None
+    cumulative_active_sec: float = 0.0
+    last_stop_reason: str | None = None
     budget_sec: int = 720
     reopen_count: int = 0
     attempts_runs: int = 0
@@ -115,6 +119,8 @@ class RaceOrchestrator:
         self.cairn = cairn_client or CairnClient(config.cairn_url, admin_token=config.cairn_admin_token)
         self.bridge = bridge_state or RaceBridgeState(self.race)
         self.questions: dict[str, TrackedQuestion] = {}
+        self.decisions: list[dict[str, Any]] = []
+        self._decision_seq = 0
         self.effective_max_scenes = max(1, int(config.max_scenes))
         self._last_poll_at = 0.0
         self._has_polled = False
@@ -152,6 +158,32 @@ class RaceOrchestrator:
             self._bridge_server.should_exit = True
         if self._bridge_thread is not None:
             self._bridge_thread.join(timeout=5.0)
+
+    def _record_decision(
+        self,
+        *,
+        trigger: str,
+        to_qid: str | None,
+        reason: str,
+        outcome: str,
+        from_qid: str | None = None,
+        budget_sec: int | None = None,
+    ) -> None:
+        self._decision_seq += 1
+        self.decisions.append(
+            {
+                "decision_id": f"dec_{self._decision_seq:04d}",
+                "ts": round(time.time(), 3),
+                "trigger": trigger,
+                "from_qid": from_qid,
+                "to_qid": to_qid,
+                "reason": reason,
+                "budget_sec": budget_sec,
+                "outcome": outcome,
+            }
+        )
+        if len(self.decisions) > 120:
+            self.decisions = self.decisions[-120:]
 
     def _compute_budget(self, difficulty: int, total_flag_num: int) -> int:
         if difficulty == 1:
@@ -345,11 +377,22 @@ class RaceOrchestrator:
         self.cairn.add_hint(pid, submit_instructions, creator="race_orchestrator")
 
         now = time.monotonic()
+        wall_now = time.time()
         q.project_id = pid
         q.status = "running"
         q.started_at = now
+        q.started_wall_at = wall_now
         q.last_progress_at = now
+        q.last_progress_wall_at = wall_now
+        q.last_stop_reason = None
         q.attempts_runs += 1
+        self._record_decision(
+            trigger="priority_dispatch",
+            to_qid=q.question_id,
+            reason=f"priority(scene={q.has_scene}, diff={q.difficulty}, score={q.score}, attempt=#{q.attempts_runs})",
+            budget_sec=q.budget_sec,
+            outcome="launched",
+        )
         LOG.info(
             "launched challenge qid=%s project=%s has_scene=%s flags=%s/%s budget=%ss",
             q.question_id,
@@ -413,6 +456,15 @@ class RaceOrchestrator:
                     )
                     reopen = self.cairn.reopen_project(pid, feedback, creator="race_orchestrator")
                     if reopen.ok:
+                        self._record_decision(
+                            trigger="multi_flag_gate",
+                            from_qid=q.question_id,
+                            to_qid=q.question_id,
+                            reason=f"premature complete ({q.current_user_solved}/{q.total_flag_num}), reopen #{q.reopen_count}",
+                            budget_sec=q.budget_sec,
+                            outcome="reopened",
+                        )
+                        self._save_state()
                         LOG.warning(
                             "reopened premature completion qid=%s project=%s progress=%s/%s reopen=%s/%s",
                             q.question_id,
@@ -440,12 +492,25 @@ class RaceOrchestrator:
                 self._suspend_question(q, reason=f"stale_no_new_flag({int(elapsed_stale)}s)")
 
     def _finalize_solved(self, q: TrackedQuestion) -> None:
+        if q.started_at is not None:
+            q.cumulative_active_sec = round(q.cumulative_active_sec + max(0.0, time.monotonic() - q.started_at), 1)
         if q.project_id:
             self.cairn.stop_project(q.project_id)
             self.bridge.unregister_project(q.project_id)
         if q.has_scene:
             self._safe_stop_scene(q.question_id)
+        q.started_at = None
+        q.started_wall_at = None
+        q.last_stop_reason = "all_flags_solved"
         q.status = "solved"
+        self._record_decision(
+            trigger="completion_verified",
+            from_qid=q.question_id,
+            to_qid=None,
+            reason=f"all flags solved ({q.current_user_solved}/{q.total_flag_num}), released slot",
+            budget_sec=q.budget_sec,
+            outcome="completed",
+        )
         LOG.info(
             "SOLVED qid=%s name=%s flags=%s/%s score=%s",
             q.question_id,
@@ -457,6 +522,8 @@ class RaceOrchestrator:
         self._save_state()
 
     def _suspend_question(self, q: TrackedQuestion, *, reason: str) -> None:
+        if q.started_at is not None:
+            q.cumulative_active_sec = round(q.cumulative_active_sec + max(0.0, time.monotonic() - q.started_at), 1)
         LOG.warning(
             "suspending qid=%s project=%s reason=%s partial_progress=%s/%s",
             q.question_id,
@@ -472,8 +539,18 @@ class RaceOrchestrator:
             self._safe_stop_scene(q.question_id)
         q.project_id = None
         q.started_at = None
+        q.started_wall_at = None
         q.last_progress_at = None
+        q.last_stop_reason = reason
         q.status = "revisit" if q.attempts_runs < 2 else "exhausted"
+        self._record_decision(
+            trigger="suspend_or_rotate",
+            from_qid=q.question_id,
+            to_qid=None,
+            reason=reason,
+            budget_sec=q.budget_sec,
+            outcome=q.status,
+        )
         self._save_state()
 
     def _safe_stop_scene(self, question_id: str) -> None:
@@ -512,9 +589,18 @@ class RaceOrchestrator:
         try:
             path = Path(self.config.state_file)
             path.parent.mkdir(parents=True, exist_ok=True)
+            active_scenes, active_att = self._active_counts()
             payload = {
                 "updated_at": datetime.now().isoformat(),
+                "heartbeat_ts": round(time.time(), 3),
                 "effective_max_scenes": self.effective_max_scenes,
+                "max_attachments": self.config.max_attachments,
+                "active_scenes": active_scenes,
+                "active_attachments": active_att,
+                "stale_timeout_sec": self.config.stale_timeout_sec,
+                "max_reopens": self.config.max_reopens,
+                "max_attempts": 2,
+                "decisions": list(self.decisions[-80:]),
                 "questions": {
                     qid: {
                         "name": q.name,
@@ -528,6 +614,15 @@ class RaceOrchestrator:
                         "total_flag_num": q.total_flag_num,
                         "reopen_count": q.reopen_count,
                         "attempts_runs": q.attempts_runs,
+                        "budget_sec": q.budget_sec,
+                        "started_wall_at": q.started_wall_at,
+                        "last_progress_wall_at": q.last_progress_wall_at,
+                        "cumulative_active_sec": round(
+                            q.cumulative_active_sec
+                            + (max(0.0, time.monotonic() - q.started_at) if q.started_at is not None else 0.0),
+                            1,
+                        ),
+                        "last_stop_reason": q.last_stop_reason,
                     }
                     for qid, q in self.questions.items()
                 },

@@ -141,11 +141,8 @@ def generate_report(
         issues = classify_shortcomings(q, detail)
         for iss in issues:
             shortcoming_counts[iss["code"]] += 1
-        first_solve = (
-            min(s["elapsed_sec"] for s in q.get("solved_details") or [])
-            if q.get("solved_details")
-            else None
-        )
+        elapsed_vals = [s["elapsed_sec"] for s in (q.get("solved_details") or []) if s.get("elapsed_sec") is not None]
+        first_solve = min(elapsed_vals) if elapsed_vals else None
         per_question_rows.append(
             {
                 "id": qid,
@@ -173,22 +170,29 @@ def generate_report(
         "questions": per_question_rows,
     }
 
+    ranked_disp = sum_d.get("ranked_score")
+    ranked_txt = str(ranked_disp) if ranked_disp is not None else "不适用（未启用排名仿真）"
     lines = [
         f"# 模型仿真比赛能力评估报告 — `{run_label}`",
         "",
         f"- **生成时间**：{metrics['generated_at']}",
-        f"- **总分（原始 / 152 队模拟名次分）**：**{sum_d.get('total_score', 0)}** / **{sum_d.get('ranked_score', 0)}**",
+        f"- **总分（原始 / 152 队模拟名次分）**：**{sum_d.get('total_score', 0)}** / **{ranked_txt}**",
         f"- **解出率**：题目 **{sum_d.get('solved_questions', 0)}/{sum_d.get('total_questions', 0)}**，Flag **{sum_d.get('solved_flags', 0)}/{sum_d.get('total_flags', 0)}**",
         f"- **合规审计**：泄密 `{len(audit.get('credential_leaks') or [])}` · 限流触发 `{audit.get('rate_limit_hits', 0)}` · 超槽触发 `{audit.get('scene_limit_hits', 0)}` · 故障自愈 `{audit.get('scene_faults_recovered', 0)}/{audit.get('scene_faults_injected', 0)}`",
         "",
-        "## 一、八大类场景能力雷达",
+        "## 一、场景类别能力雷达",
         "",
         "| 场景类别 | 题数（全解/总数） | Flag（已解/总数） | Flag 完成率 |",
         "| --- | :---: | :---: | :---: |",
     ]
     for c in snapshot.get("categories") or []:
-        pct = round(100.0 * c["solved_flags"] / max(1, c["total_flags"]), 1)
-        lines.append(f"| {c['category']} | {c['solved_q']}/{c['total_q']} | {c['solved_flags']}/{c['total_flags']} | {pct}% |")
+        if (c.get("total_flags") or 0) > 0:
+            pct_str = f"{round(100.0 * c['solved_flags'] / c['total_flags'], 1)}%"
+            flag_str = f"{c['solved_flags']}/{c['total_flags']}"
+        else:
+            pct_str = "不适用（非Flag题）"
+            flag_str = "不适用"
+        lines.append(f"| {c['category']} | {c['solved_q']}/{c['total_q']} | {flag_str} | {pct_str} |")
 
     lines.extend(
         [
