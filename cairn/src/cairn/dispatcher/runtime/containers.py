@@ -62,6 +62,8 @@ class ContainerManager:
             run_kwargs["nano_cpus"] = int(self._config.cpu_limit * 1_000_000_000)
         if self._config.pids_limit is not None:
             run_kwargs["pids_limit"] = self._config.pids_limit
+        if self._config.volumes:
+            run_kwargs["volumes"] = list(self._config.volumes)
         try:
             self._client.containers.run(
                 self._config.image,
@@ -199,7 +201,13 @@ class ContainerManager:
         return self.inspect_state(name) is not None
 
     def needs_stopped_cleanup(self, project_id: str) -> bool:
-        return self.inspect_state(self.container_name(project_id)) == "running"
+        name = self.container_name(project_id)
+        state = self.inspect_state(name)
+        if state is None:
+            return False
+        if self._config.completed_action == "remove":
+            return True
+        return state == "running"
 
     def build_exec_process(
         self,

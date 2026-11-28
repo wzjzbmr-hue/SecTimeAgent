@@ -118,10 +118,10 @@ def run_tshark(pcap: str, proto: str, *, port: int | None = None, limit: int = 2
     return rows
 
 
-def detect_proto(pcap: str) -> str:
+def detect_proto(pcap: str, *, port: int | None = None) -> str:
     for proto in ("modbus", "s7", "iec104"):
         try:
-            if run_tshark(pcap, proto, limit=1):
+            if run_tshark(pcap, proto, port=port, limit=1):
                 return proto
         except Exception:
             continue
@@ -137,7 +137,7 @@ def main() -> int:
     ap.add_argument("--json", dest="as_json", action="store_true")
     args = ap.parse_args()
 
-    proto = detect_proto(args.pcap) if args.proto == "auto" else args.proto
+    proto = detect_proto(args.pcap, port=args.port) if args.proto == "auto" else args.proto
     rows = run_tshark(args.pcap, proto, port=args.port, limit=args.limit)
     if args.as_json:
         print(json.dumps({"proto": proto, "count": len(rows), "rows": rows}, ensure_ascii=False, indent=2))

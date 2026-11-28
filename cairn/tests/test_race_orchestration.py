@@ -17,8 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from cairn.dispatcher.protocol.client import CairnClient
-from cairn.race.bridge import RaceBridgeState, create_bridge_app
-from cairn.race.client import ERR_SCENE_LIMIT, OfficialRaceClient, RaceApiError, is_question_complete
+from cairn.race.client import OfficialRaceClient, RaceApiError
 from cairn.race.orchestrator import OrchestratorConfig, RaceOrchestrator
 from cairn.server import db
 from cairn.server.app import app as cairn_app
@@ -351,3 +350,56 @@ def test_ics_client_modbus_frame_and_loopback_read() -> None:
     assert res["ok"] is True
     assert res["registers"] == [0x4142, 0x4344]
     assert res["ascii"] == "ABCD"
+
+
+def test_race_client_bounds_persistent_scene_status_20_recovery() -> None:
+    class BrokenRaceClient(OfficialRaceClient):
+        def __init__(self):
+            super().__init__("http://127.0.0.1:1", "tok", rate_per_sec=100.0)
+            self.starts = 0
+            self.stops = 0
+            self.state = 3
+
+        def question_instance_info(self, question_id: str) -> dict[str, Any]:
+            return {"resource_id": question_id, "scene_status": self.state, "scene_addresses": []}
+
+        def question_start(self, question_id: str) -> bool:
+            self.starts += 1
+            self.state = 20
+            return True
+
+        def question_stop(self, question_id: str) -> bool:
+            self.stops += 1
+            self.state = 3
+            return True
+
+    client = BrokenRaceClient()
+    try:
+        client.ensure_scene_running("q_broken", wait_timeout=10.0, poll_interval=0.01)
+        raise AssertionError("expected SCENE_RECOVERY_EXHAUSTED")
+    except RaceApiError as exc:
+        assert exc.code == "SCENE_RECOVERY_EXHAUSTED"
+        assert client.stops == 2
+
+
+def test_orchestrator_does_not_spam_poll_when_zero_questions_visible() -> None:
+    calls = {"list": 0}
+
+    class EmptyRace:
+        def question_list(self):
+            calls["list"] += 1
+            return []
+
+    class DummyCairn:
+        pass
+
+    cfg = OrchestratorConfig(
+        race_base_url="http://127.0.0.1:1",
+        agent_token="tok",
+        poll_interval_sec=60.0,
+    )
+    orch = RaceOrchestrator(cfg, race_client=EmptyRace(), cairn_client=DummyCairn())
+    orch.tick()
+    orch.tick()
+    orch.tick()
+    assert calls["list"] == 1

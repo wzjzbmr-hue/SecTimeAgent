@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SecTimeAgent 仿真评估实时进度看板（本地观测）</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #131b31; --panel-2: #192340; --border: #253358;
+    --text: #e6ecf8; --muted: #8ea0c6; --accent: #4cc9f0;
+    --ok: #2ecc71; --warn: #f59e0b; --err: #ef4444; --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+  .brand { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); display: inline-block; }
+  .live-dot.off { background: var(--err); box-shadow: none; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  main { padding: 16px 20px; max-width: 1560px; margin: 0 auto; display: grid; gap: 16px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .kpi .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+  .kpi .val { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); } .accent { color: var(--accent); }
+  .section-title { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .cat-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .cat-pill { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .cat-pill .cname { font-size: 12px; font-weight: 600; }
+  .cat-pill .cmeta { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; justify-content: space-between; }
+  .progress { height: 5px; background: #0f172a; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .progress > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--ok)); transition: width 0.4s; }
+  .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .grid-2 { grid-template-columns: 1fr; } }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .qcard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: border-color 0.2s, transform 0.15s; }
+  .qcard:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .qcard.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .qcard.solved { border-color: rgba(46,204,113,0.55); }
+  .qhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .qtitle { font-size: 13px; font-weight: 700; }
+  .qcat { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 600; white-space: nowrap; }
+  .b-solved { background: rgba(46,204,113,0.18); color: var(--ok); }
+  .b-running { background: rgba(76,201,240,0.18); color: var(--accent); }
+  .b-pending { background: rgba(142,160,198,0.15); color: var(--muted); }
+  .b-locked { background: rgba(100,116,139,0.15); color: #64748b; }
+  .b-fault { background: rgba(239,68,68,0.2); color: var(--err); }
+  .b-revisit { background: rgba(245,158,11,0.2); color: var(--warn); }
+  .qmeta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .qfact { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: var(--bg); font-size: 11px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side-col { display: grid; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .kv-list { display: grid; gap: 6px; font-size: 12px; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed rgba(37,51,88,0.6); padding-bottom: 5px; }
+  .kv:last-child { border-bottom: none; padding-bottom: 0; }
+  .feed { max-height: 280px; overflow-y: auto; display: grid; gap: 6px; font-size: 11px; }
+  .feed-item { background: var(--bg); border-left: 3px solid var(--border); padding: 6px 8px; border-radius: 4px; }
+  .feed-item.pass { border-left-color: var(--ok); }
+  .feed-item.err { border-left-color: var(--err); }
+  .feed-item.warn { border-left-color: var(--warn); }
+  .feed-item.info { border-left-color: var(--accent); }
+  .detail-box { font-size: 12px; display: grid; gap: 8px; }
+  pre { background: var(--bg); padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 11px; margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; color: #cbd5e1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span id="connDot" class="live-dot"></span>
+    <span>SecTimeAgent 仿真评估实时进度看板</span>
+    <span id="clockBadge" class="badge b-running">00:00 / 04:00:00</span>
+  </div>
+  <div class="controls">
+    <button onclick="releaseNextWave()">提前释放下一波题目</button>
+    <button onclick="refreshNow()">立即刷新</button>
+    <button onclick="resetSim()" style="color:#f59e0b">重置仿真赛</button>
+  </div>
+</header>
+
+<main>
+  <section class="kpi-row" id="kpiRow"></section>
+
+  <section>
+    <div class="section-title"><span>八大类场景覆盖进度</span><span id="catHint"></span></div>
+    <div class="cat-bar" id="catBar"></div>
+  </section>
+
+  <section class="grid-2">
+    <div>
+      <div class="section-title">
+        <span>赛题实时状态矩阵（点击题目查看实时 Fact / Intent 与提交记录）</span>
+        <span id="qCount"></span>
+      </div>
+      <div class="card-grid" id="qGrid"></div>
+    </div>
+
+    <div class="side-col">
+      <div class="panel">
+        <div class="section-title"><span>题目实时轨迹详情</span><span id="detailId" class="accent">未选择</span></div>
+        <div id="detailBox" class="detail-box"><div style="color:var(--muted)">点击左侧任意题目查看 Cairn 实时 Fact、活跃 Intent 与提交记录。</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="section-title"><span>模型代理与 Token 遥测</span><span id="proxyStatus"></span></div>
+        <div id="proxyBox" class="kv-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="section-title"><span>赛场合规与协议红线审计</span></div>
+        <div id="auditBox" class="kv-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="section-title"><span>实时事件与提交流水</span></div>
+        <div id="feedBox" class="feed"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+let latestSnap = null;
+let selectedQid = null;
+
+function fmtSec(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${sec}`;
+}
+function fmtNum(n) { return (n || 0).toLocaleString('en-US'); }
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function sceneLabel(st) {
+  if (st === null || st === undefined) return '纯附件';
+  return ({0:'启动中(0)', 1:'运行中(1)', 2:'停止中(2)', 3:'未启动(3)', 20:'故障(20)'})[st] || `状态(${st})`;
+}
+function badgeFor(q) {
+  if (!q.visible) return ['b-locked', `波次${q.wave} 未放出`];
+  if (q.complete) return ['b-solved', `已全解 ${q.current_user_solved}/${q.total_flag_num}`];
+  if (q.scene_status === 20) return ['b-fault', '场景故障(20)'];
+  if (q.orch_status === 'running') return ['b-running', `解题中 ${q.current_user_solved}/${q.total_flag_num}`];
+  if (q.orch_status === 'revisit') return ['b-revisit', `待回杀 ${q.current_user_solved}/${q.total_flag_num}`];
+  if (q.orch_status === 'exhausted') return ['b-fault', `耗尽 ${q.current_user_solved}/${q.total_flag_num}`];
+  return ['b-pending', `待调度 ${q.current_user_solved}/${q.total_flag_num}`];
+}
+
+function render(snap) {
+  latestSnap = snap;
+  const sum = snap.summary;
+  const clk = snap.clock;
+  document.getElementById('clockBadge').textContent = `${fmtSec(clk.elapsed_sec)} / ${fmtSec(clk.duration_sec)}`;
+
+  const leaks = (snap.audit.credential_leaks || []).length;
+  const rateHits = snap.audit.rate_limit_hits || 0;
+  const capHits = snap.audit.scene_limit_hits || 0;
+  const complianceOk = leaks === 0 && rateHits === 0 && capHits === 0;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi"><div class="label">原始得分 / 排名模拟分</div><div class="val accent">${sum.total_score} <span style="font-size:14px;color:var(--ok)">(${sum.ranked_score})</span></div><div class="sub">152 队官方衰减曲线</div></div>
+    <div class="kpi"><div class="label">Flag 解出进度</div><div class="val ok">${sum.solved_flags} / ${sum.total_flags}</div><div class="sub">完整解出 ${sum.solved_questions} / ${sum.total_questions} 题</div></div>
+    <div class="kpi"><div class="label">已放出题目</div><div class="val">${sum.visible_questions} / ${sum.total_questions}</div><div class="sub">分阶段放题模拟</div></div>
+    <div class="kpi"><div class="label">在线场景槽位</div><div class="val ${sum.running_scenes >= sum.max_scenes ? 'warn' : 'accent'}">${sum.running_scenes} / ${sum.max_scenes}</div><div class="sub">Cairn=${snap.cairn_available ? '在线' : '离线'} · 总控=${snap.orchestrator.available ? '在线' : '等待'}</div></div>
+    <div class="kpi"><div class="label">合规红线审计</div><div class="val ${complianceOk ? 'ok' : 'err'}">${complianceOk ? 'PASS' : 'WARN'}</div><div class="sub">泄密:${leaks} · 限流:${rateHits} · 超槽:${capHits}</div></div>
+  `;
+
+  document.getElementById('catBar').innerHTML = (snap.categories || []).map(c => {
+    const pct = c.total_flags ? Math.round((c.solved_flags / c.total_flags) * 100) : 0;
+    return `<div class="cat-pill">
+      <div class="cname">${esc(c.category)}</div>
+      <div class="cmeta"><span>题 ${c.solved_q}/${c.total_q}</span><span>Flag ${c.solved_flags}/${c.total_flags} (${pct}%)</span></div>
+      <div class="progress"><div style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('qCount').textContent = `共 ${snap.questions.length} 题`;
+  document.getElementById('qGrid').innerHTML = snap.questions.map(q => {
+    const [bcls, btxt] = badgeFor(q);
+    const pct = q.total_flag_num ? Math.round((q.current_user_solved / q.total_flag_num) * 100) : 0;
+    const lastFact = q.cairn && q.cairn.recent_facts && q.cairn.recent_facts.length
+      ? q.cairn.recent_facts[q.cairn.recent_facts.length - 1].description
+      : (q.scene_addresses && q.scene_addresses.length ? `目标: ${q.scene_addresses.map(a => `${a.protocol}://${a.access_ip}:${a.access_port}`).join(', ')}` : '暂无实时 Fact');
+    const diffName = ({1:'简单', 2:'中等', 3:'困难'})[q.difficulty] || `D${q.difficulty}`;
+    return `<div class="qcard ${q.complete ? 'solved' : ''} ${selectedQid === q.id ? 'selected' : ''}" onclick="selectQ('${esc(q.id)}')">
+      <div class="qhead">
+        <div>
+          <div class="qtitle">[${esc(q.id)}] ${esc(q.name)}</div>
+          <div class="qcat">${esc(q.category)} · ${diffName} · ${q.score} 分 · ${sceneLabel(q.scene_status)}</div>
+        </div>
+        <span class="badge ${bcls}">${btxt}</span>
+      </div>
+      <div class="progress"><div style="width:${pct}%"></div></div>
+      <div class="qmeta">
+        <span>对手已解: ${q.all_user_solved}</span>
+        ${q.reopen_count ? `<span class="warn">Reopen: ${q.reopen_count}</span>` : ''}
+        ${q.cairn ? `<span>Facts: ${q.cairn.fact_count} · Intents: ${q.cairn.intent_count}</span>` : ''}
+      </div>
+      <div class="qfact">${esc(lastFact)}</div>
+    </div>`;
+  }).join('');
+
+  renderDetail();
+
+  // Proxy telemetry
+  const px = snap.proxy || {};
+  document.getElementById('proxyStatus').textContent = px.available ? '在线' : '未连接';
+  if (px.available) {
+    const tot = px.total || {};
+    const rows = [
+      `<div class="kv"><span>总请求 / Failover</span><b>${fmtNum(tot.calls)} / <span class="${tot.failovers ? 'warn' : 'ok'}">${fmtNum(tot.failovers)}</span></b></div>`,
+      `<div class="kv"><span>Input / Output Token</span><b>${fmtNum(tot.input)} / ${fmtNum(tot.output)}</b></div>`,
+      `<div class="kv"><span>Cache Read Token</span><b>${fmtNum(tot.cache_read)}</b></div>`,
+    ];
+    for (const [rname, st] of Object.entries(px.by_route || {})) {
+      rows.push(`<div class="kv"><span class="accent">路由 ${esc(rname)}</span><span>${st.calls} 次 · in ${fmtNum(st.input)} / out ${fmtNum(st.output)}</span></div>`);
+    }
+    document.getElementById('proxyBox').innerHTML = rows.join('');
+  } else {
+    document.getElementById('proxyBox').innerHTML = '<div style="color:var(--muted)">未配置或代理未运行</div>';
+  }
+
+  // Audit
+  const a = snap.audit || {};
+  document.getElementById('auditBox').innerHTML = `
+    <div class="kv"><span>API / MCP 总调用</span><b>${fmtNum(a.total_api_calls)} / ${fmtNum(a.total_mcp_calls)}</b></div>
+    <div class="kv"><span>限流触发 (AD-002002)</span><b class="${a.rate_limit_hits ? 'err' : 'ok'}">${a.rate_limit_hits}</b></div>
+    <div class="kv"><span>超槽触发 (AD-162006)</span><b class="${a.scene_limit_hits ? 'err' : 'ok'}">${a.scene_limit_hits}</b></div>
+    <div class="kv"><span>故障注入 / 已自愈</span><b>${a.scene_faults_injected} / ${a.scene_faults_recovered}</b></div>
+    <div class="kv"><span>密钥/Token 泄露检出</span><b class="${(a.credential_leaks||[]).length ? 'err' : 'ok'}">${(a.credential_leaks||[]).length}</b></div>
+    <div class="kv"><span>已解未释放场景</span><b class="${(a.unstopped_solved_scenes||[]).length ? 'warn' : 'ok'}">${(a.unstopped_solved_scenes||[]).length}</b></div>
+  `;
+
+  // Event feed
+  const evs = (snap.events || []).slice().reverse().slice(0, 40);
+  document.getElementById('feedBox').innerHTML = evs.map(e => {
+    const cls = e.kind === 'flag_pass' ? 'pass' : (e.kind.includes('fault') || e.kind.includes('err') || e.kind.includes('leak') || e.kind.includes('wrong') ? 'err' : (e.kind.includes('limit') ? 'warn' : 'info'));
+    return `<div class="feed-item ${cls}"><div><b>[${fmtSec(e.elapsed_sec)}]</b> ${esc(e.message)}</div></div>`;
+  }).join('');
+}
+
+function selectQ(qid) { selectedQid = qid; renderDetail(); }
+
+function renderDetail() {
+  if (!latestSnap || !selectedQid) return;
+  const q = latestSnap.questions.find(x => x.id === selectedQid);
+  if (!q) return;
+  document.getElementById('detailId').textContent = `${q.id} · ${q.name}`;
+  const addrs = (q.scene_addresses || []).map(a => `${a.protocol}://${a.access_ip}:${a.access_port}`).join(', ') || '无';
+  const factsHtml = q.cairn && q.cairn.recent_facts && q.cairn.recent_facts.length
+    ? q.cairn.recent_facts.map(f => `<pre>[${esc(f.id)}] ${esc(f.description)}</pre>`).join('')
+    : '<div style="color:var(--muted)">暂无 Cairn Fact 记录</div>';
+  const intentsHtml = q.cairn && q.cairn.active_intents && q.cairn.active_intents.length
+    ? q.cairn.active_intents.map(i => `<pre>[${esc(i.id)}] worker=${esc(i.worker||'待认领')} ${i.concluded_at?'(已完成)':'(运行中)'}\n${esc(i.description)}</pre>`).join('')
+    : '';
+  const solvedHtml = (q.solved_details || []).map(s => `<div class="ok">Flag #${s.flag_index} @ ${fmtSec(s.elapsed_sec)} (+${s.score} / 排名分 +${s.ranked_score}, #${s.simulated_rank})</div>`).join('');
+
+  document.getElementById('detailBox').innerHTML = `
+    <div><b>入口地址：</b><span class="accent">${esc(addrs)}</span></div>
+    <div><b>项目 ID：</b>${esc(q.project_id || '尚未创建')} · <b>Reopen：</b>${q.reopen_count}</div>
+    ${solvedHtml ? `<div><b>得分记录：</b>${solvedHtml}</div>` : ''}
+    ${q.has_scene ? `<div><button onclick="injectFault('${esc(q.id)}')">下一次启动注入 status=20 故障</button></div>` : ''}
+    <div><b>最新 Facts：</b>${factsHtml}</div>
+    ${intentsHtml ? `<div><b>最新 Intents：</b>${intentsHtml}</div>` : ''}
+  `;
+}
+
+async function releaseNextWave() { await fetch('/api/admin/release-next', {method:'POST'}); refreshNow(); }
+async function injectFault(qid) { await fetch(`/api/admin/inject-fault/${encodeURIComponent(qid)}`, {method:'POST'}); refreshNow(); }
+async function resetSim() { if (confirm('确认重置仿真赛状态与分数？')) { await fetch('/api/admin/reset', {method:'POST'}); refreshNow(); } }
+async function refreshNow() { const r = await fetch('/api/dashboard/snapshot'); render(await r.json()); }
+
+function connectSSE() {
+  const es = new EventSource('/api/dashboard/stream');
+  es.onopen = () => document.getElementById('connDot').classList.remove('off');
+  es.onmessage = ev => { try { render(JSON.parse(ev.data)); } catch(e) {} };
+  es.onerror = () => { document.getElementById('connDot').classList.add('off'); };
+}
+refreshNow();
+connectSSE();
+</script>
+</body>
+</html>

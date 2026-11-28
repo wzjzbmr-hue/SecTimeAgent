@@ -17,6 +17,7 @@ services:
       CAIRN_ADMIN_TOKEN: ${CAIRN_ADMIN_TOKEN:-}
     volumes:
       - ./runtime/cairn:/root/.local/share/cairn
+      - ./runtime:/workspace/runtime
     healthcheck:
       test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 5s
@@ -26,7 +27,7 @@ services:
   proxy:
     <<: *runtime
     container_name: cairn-ubuntu-proxy
-    command: [/cairn/.venv/bin/python, /workspace/bench/token_proxy.py, --host, 127.0.0.1, --port, '8100', --route, 'glm=https://open.bigmodel.cn/api/anthropic', --route, 'ds=https://api.deepseek.com/anthropic']
+    command: [/cairn/.venv/bin/python, /workspace/bench/token_proxy.py, --host, 127.0.0.1, --port, '8100', --config, /config/proxy.yaml]
     environment:
       TZ: Asia/Shanghai
       PROXY_CONFIG: ${PROXY_CONFIG:-/config/proxy.yaml}
@@ -46,20 +47,6 @@ services:
       timeout: 4s
       retries: 12
 
-  submit:
-    <<: *runtime
-    container_name: cairn-ubuntu-submit
-    command: [/cairn/.venv/bin/python, /workspace/bench/submit_server.py, --host, 127.0.0.1, --port, '8099']
-    volumes:
-      - ./bench:/workspace/bench:ro
-      - ./runtime/bench-results:/workspace/bench/results
-      - /var/run/docker.sock:/var/run/docker.sock
-    healthcheck:
-      test: [CMD, /cairn/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/health', timeout=3)"]
-      interval: 5s
-      timeout: 4s
-      retries: 12
-
   dispatcher:
     <<: *runtime
     container_name: cairn-ubuntu-dispatcher
@@ -67,10 +54,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config/dispatch.yaml:/config/dispatch.yaml:ro
+      - ./runtime/archives:/workspace/runtime/archives
     depends_on:
       server:
         condition: service_healthy
       proxy:
-        condition: service_healthy
-      submit:
         condition: service_healthy

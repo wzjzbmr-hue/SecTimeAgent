@@ -1,10 +1,25 @@
 # Build context: repository root. First load the verified tools-ready offline image.
-# This preserves the deployed tool environment; it is not a from-scratch rebuild.
+# Overlays competition tools/instructions and strips legacy slop from the base image.
 ARG BASE_IMAGE=cairn-worker:tools-ready-20261125
 FROM ${BASE_IMAGE}
 USER root
+RUN rm -rf /home/kali/workspace/.claude/skills/tsec-actions \
+           /home/kali/workspace/.agents/skills/tsec-actions \
+           /home/kali/workspace/boofuzz-results \
+           /opt/cairn-race \
+           /tmp/*
 COPY worker/deployed-rootfs/ /
-RUN chmod 755 /usr/local/bin/poc-catalog \
+RUN sed -i 's/\r$//' \
+      /usr/local/bin/poc-catalog \
+      /usr/local/bin/uuidgen \
+      /usr/local/bin/nmap \
+      /usr/local/bin/submit-flag \
+      /opt/cairn-poc/hashpath.py \
+      /opt/cairn-poc/pcap_summary.py \
+      /opt/cairn-poc/ics_client.py \
+      /opt/cairn-poc/poc_catalog.py \
+ && cp /home/kali/workspace/CLAUDE.md /home/kali/workspace/AGENTS.md \
+ && chmod 755 /usr/local/bin/poc-catalog \
               /usr/local/bin/uuidgen \
               /usr/local/bin/nmap \
               /usr/local/bin/submit-flag \
@@ -14,3 +29,4 @@ RUN chmod 755 /usr/local/bin/poc-catalog \
  && chown -R kali:kali /home/kali/workspace
 USER kali
 WORKDIR /home/kali/workspace
+CMD ["sleep", "infinity"]

@@ -1,7 +1,6 @@
 """Benign runtime regression for a validator-only randstr diagnostic. No exploit."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile

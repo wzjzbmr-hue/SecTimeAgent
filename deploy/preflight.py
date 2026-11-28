@@ -46,7 +46,7 @@ def check_item(name: str, ok: bool, detail: str) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Pre-competition preflight check (zero external deps)")
-    ap.add_argument("--worker-image", default=os.environ.get("WORKER_IMAGE", "cairn-worker:tools-ready-20261125"))
+    ap.add_argument("--worker-image", default=os.environ.get("WORKER_IMAGE", "cairn-worker:competition"))
     ap.add_argument("--expected-image-id", default=os.environ.get("EXPECTED_WORKER_IMAGE_ID", ""))
     ap.add_argument("--cairn-url", default=os.environ.get("CAIRN_URL", "http://127.0.0.1:8000"))
     ap.add_argument("--proxy-url", default=os.environ.get("PROXY_URL", "http://127.0.0.1:8100"))

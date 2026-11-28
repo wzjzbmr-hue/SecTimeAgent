@@ -2,7 +2,7 @@
 """LLM 记账、密钥托管与白名单主备切换代理。
 
 作用：
-  1. 宿主机托管真实上游 API Key（Worker 容器只放占位符，杜绝 T+N 公开对话泄密）
+  1. 宿主机托管真实上游 API Key（Worker 容器只放占位符，杜绝公开审计日志泄密）
   2. 支持配置赛场平台分配的白名单专属网关 URL（保留 Anthropic /v1 路径）
   3. 支持主备白名单路由自动故障转移（402 / 429(code=1113) / 401 / 连续 5xx 自动切备）
   4. 支持流式（SSE，兼容 data: 有无空格）与非流式 token 记账，带 90s 流式读超时保护
@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 import uvicorn
 import yaml
 from fastapi import FastAPI, Request
@@ -58,6 +59,18 @@ READ_TIMEOUT_SECONDS = 90.0
 
 LOCK = threading.Lock()
 STATS: dict[str, dict[str, Any]] = {}
+_THREAD_LOCAL = threading.local()
+
+
+def _http_session() -> requests.Session:
+    sess = getattr(_THREAD_LOCAL, "session", None)
+    if sess is None:
+        sess = requests.Session()
+        adapter = HTTPAdapter(pool_connections=32, pool_maxsize=32)
+        sess.mount("http://", adapter)
+        sess.mount("https://", adapter)
+        _THREAD_LOCAL.session = sess
+    return sess
 
 app = FastAPI(title="Token Meter & Failover Proxy")
 
@@ -253,7 +266,7 @@ def _send_to_target(
 
     for i in range(attempts):
         try:
-            resp = requests.request(
+            resp = _http_session().request(
                 method,
                 upstream,
                 data=payload,
@@ -317,16 +330,18 @@ def forward(route: str, rest: str, request: Request, body: bytes, headers: dict[
         raw = resp.content
         usage: dict = {}
         model = ""
+        parsed_body: Any = None
         try:
-            data = json.loads(raw)
-            usage = data.get("usage") or {}
-            model = data.get("model") or ""
+            parsed_body = json.loads(raw)
+            if isinstance(parsed_body, dict):
+                usage = parsed_body.get("usage") or {}
+                model = parsed_body.get("model") or ""
         except Exception:
-            pass
+            parsed_body = None
         record(route, chosen.name, rest, model, usage, resp.status_code, time.monotonic() - t0, failover=did_failover)
         resp.close()
         return JSONResponse(
-            content=json.loads(raw) if raw.strip().startswith(b"{") else {"raw": raw.decode("utf-8", "ignore")},
+            content=parsed_body if parsed_body is not None else {"raw": raw.decode("utf-8", "ignore")},
             status_code=resp.status_code,
         )
 
@@ -336,19 +351,21 @@ def forward(route: str, rest: str, request: Request, body: bytes, headers: dict[
     def streamer():
         nonlocal model_name
         try:
-            for chunk in resp.iter_lines(chunk_size=1):
+            for chunk in resp.iter_lines(chunk_size=4096):
                 if chunk is None:
                     continue
                 line = chunk + b"\n"
                 yield line
-                if b'"model"' in line and not model_name:
-                    try:
-                        obj = json.loads(line.strip()[5:])
-                        model_name = obj.get("model") or (obj.get("message") or {}).get("model") or ""
-                    except Exception:
-                        pass
-                if b"data:" in line:
-                    parse_sse_usage(line, acc)
+                stripped = line.strip()
+                if stripped.startswith(b"data:"):
+                    if b'"model"' in stripped and not model_name:
+                        try:
+                            obj = json.loads(stripped[5:].strip())
+                            if isinstance(obj, dict):
+                                model_name = obj.get("model") or (obj.get("message") or {}).get("model") or ""
+                        except Exception:
+                            pass
+                    parse_sse_usage(stripped, acc)
         finally:
             record(route, chosen.name, rest, model_name, acc, resp.status_code, time.monotonic() - t0, failover=did_failover)
             resp.close()
@@ -377,16 +394,17 @@ async def proxy(route: str, rest: str, request: Request):
 def stats():
     now = time.monotonic()
     with LOCK:
+        by_route = {k: dict(v) for k, v in STATS.items()}
         total = {
-            "calls": sum(s["calls"] for s in STATS.values()),
-            "failovers": sum(s["failovers"] for s in STATS.values()),
-            "input": sum(s["input"] for s in STATS.values()),
-            "output": sum(s["output"] for s in STATS.values()),
-            "cache_read": sum(s["cache_read"] for s in STATS.values()),
-            "cache_write": sum(s["cache_write"] for s in STATS.values()),
+            "calls": sum(s["calls"] for s in by_route.values()),
+            "failovers": sum(s["failovers"] for s in by_route.values()),
+            "input": sum(s["input"] for s in by_route.values()),
+            "output": sum(s["output"] for s in by_route.values()),
+            "cache_read": sum(s["cache_read"] for s in by_route.values()),
+            "cache_write": sum(s["cache_write"] for s in by_route.values()),
         }
         cooling = {k: round(v - now, 1) for k, v in COOLDOWN_UNTIL.items() if v > now}
-    return {"by_route": STATS, "total": total, "cooling_down": cooling, "log": str(LOG)}
+    return {"by_route": by_route, "total": total, "cooling_down": cooling, "log": str(LOG)}
 
 
 @app.get("/health")

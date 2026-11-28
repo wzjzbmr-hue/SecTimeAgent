@@ -49,8 +49,8 @@ class OrchestratorConfig:
     disk_min_free_gb: float = 4.0
     attachments_dir: str = "/tmp/cairn-attachments"
     state_file: str = "runtime/race-orchestrator-state.json"
-    start_at: str | None = None  # ISO-8601 e.g. 2026-12-02T08:30:00+08:00
-    end_at: str | None = None    # ISO-8601 e.g. 2026-12-02T12:30:00+08:00
+    start_at: str | None = None  # ISO-8601 e.g. 2026-01-01T08:30:00+08:00
+    end_at: str | None = None    # ISO-8601 e.g. 2026-01-01T12:30:00+08:00
 
 
 @dataclass
@@ -85,15 +85,10 @@ class TrackedQuestion:
 def _format_addresses(addresses: list[dict[str, Any]]) -> str:
     if not addresses:
         return "(none)"
-    parts: list[str] = []
-    for addr in addresses:
-        proto = str(addr.get("protocol") or "tcp").lower()
-        ip = str(addr.get("access_ip") or "")
-        port = addr.get("access_port")
-        if proto in ("http", "https"):
-            parts.append(f"{proto}://{ip}:{port}")
-        else:
-            parts.append(f"{proto}://{ip}:{port}")
+    parts = [
+        f"{str(addr.get('protocol') or 'tcp').lower()}://{addr.get('access_ip') or ''}:{addr.get('access_port')}"
+        for addr in addresses
+    ]
     return ", ".join(parts)
 
 
@@ -122,6 +117,7 @@ class RaceOrchestrator:
         self.questions: dict[str, TrackedQuestion] = {}
         self.effective_max_scenes = max(1, int(config.max_scenes))
         self._last_poll_at = 0.0
+        self._has_polled = False
         self._last_disk_check_at = 0.0
         self._stop_event = threading.Event()
         self._bridge_server: uvicorn.Server | None = None
@@ -495,7 +491,20 @@ class RaceOrchestrator:
             usage = shutil.disk_usage("/")
             free_gb = usage.free / (1024 ** 3)
             if free_gb < self.config.disk_min_free_gb:
-                LOG.warning("LOW DISK WARNING: %.2f GB free (threshold %.1f GB)", free_gb, self.config.disk_min_free_gb)
+                LOG.warning(
+                    "LOW DISK WARNING: %.2f GB free (threshold %.1f GB); pruning solved attachments & stale prompts",
+                    free_gb,
+                    self.config.disk_min_free_gb,
+                )
+                att_root = Path(self.config.attachments_dir)
+                for qid, q in self.questions.items():
+                    if q.status in ("solved", "exhausted"):
+                        qdir = att_root / qid
+                        if qdir.is_dir():
+                            shutil.rmtree(qdir, ignore_errors=True)
+                prompt_tmp = Path("/tmp/cairn-prompts")
+                if prompt_tmp.is_dir():
+                    shutil.rmtree(prompt_tmp, ignore_errors=True)
         except Exception:
             pass
 
@@ -548,9 +557,10 @@ class RaceOrchestrator:
 
     def tick(self) -> None:
         now = time.monotonic()
-        if now - self._last_poll_at >= self.config.poll_interval_sec or not self.questions:
+        if not self._has_polled or (now - self._last_poll_at >= self.config.poll_interval_sec):
             self.poll_questions()
             self._last_poll_at = now
+            self._has_polled = True
         self._monitor_running()
         self._dispatch_pending()
         self._check_disk_watermark()

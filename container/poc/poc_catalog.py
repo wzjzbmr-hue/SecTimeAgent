@@ -251,7 +251,8 @@ def check(args, lock):
             continue
         source = next(s for s in lock['sources'] if s['id'] == args.source)
         root = source_root(args.prefix, source)
-        identity(root, source)
+        if (root / '.git').exists():
+            identity(root, source)
         if item.get('availability') == 'withdrawn':
             item.pop('search_text')
             print(json.dumps(dict(item, preflight='blocked'), ensure_ascii=False))

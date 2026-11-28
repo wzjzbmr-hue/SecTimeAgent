@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic ICS protocol client (Modbus TCP / S7) to prevent manual packet framing bugs.
+"""Deterministic pure-Python Modbus TCP client to prevent manual packet framing bugs.
 
-Uses installed pymodbus (handling 3.x keyword-only `count=`/`device_id=` APIs) or pure-Python
-RFC-compliant Modbus TCP fallback so the Worker never hand-crafts broken MBAP headers.
+Builds exact 12-byte RFC-compliant Modbus TCP (MBAP + PDU) read frames and decodes
+FC1/FC2/FC3/FC4 responses into hex, ASCII, bits, and uint16 registers with zero external deps.
 
 Usage:
-  /opt/cairn-poc-runtime/bin/python /opt/cairn-poc/ics_client.py modbus-dump 127.0.0.1 502 --unit 1 --count 32
+  python3 /opt/cairn-poc/ics_client.py modbus-dump 127.0.0.1 502 --unit 1 --count 32
   python3 /opt/cairn-poc/ics_client.py modbus-read 127.0.0.1 502 --fc 3 --addr 0 --count 16 --unit 1
 """
 from __future__ import annotations
@@ -57,22 +57,27 @@ def parse_mbap_response(data: bytes) -> dict[str, Any]:
     return result
 
 
+def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            break
+        buf.extend(chunk)
+    return bytes(buf)
+
+
 def modbus_read(host: str, port: int, *, unit: int = 1, fc: int = 3, addr: int = 0, count: int = 16, timeout: float = 5.0) -> dict[str, Any]:
     frame = build_mbap_read_frame(1, unit, fc, addr, count)
     with socket.create_connection((host, port), timeout=timeout) as sock:
         sock.settimeout(timeout)
         sock.sendall(frame)
-        header = sock.recv(7)
+        header = _recv_exact(sock, 7)
         if len(header) < 7:
             raise RuntimeError(f"short MBAP header ({len(header)} bytes)")
         _, _, length, _ = struct.unpack(">HHHB", header)
         remaining = max(0, length - 1)
-        body = b""
-        while len(body) < remaining:
-            chunk = sock.recv(remaining - len(body))
-            if not chunk:
-                break
-            body += chunk
+        body = _recv_exact(sock, remaining)
     parsed = parse_mbap_response(header + body)
     parsed["request_hex"] = frame.hex()
     return parsed

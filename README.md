@@ -1,6 +1,6 @@
 # SecTimeAgent
 
-基于 [oritera/Cairn](https://github.com/oritera/Cairn) 深度加固与重构），针对 **Ubuntu 24.04（8 核 / 16 GB RAM / 50 GB 磁盘）**、**4 小时全自动无人值守**、**一题多 Flag**、**国产大模型白名单网关** 与 **T+N 公开对话零泄密** 场景设计。
+面向自动化网络安全演练与 CTF 攻防场景的全自主智能体框架（基于 [oritera/Cairn](https://github.com/oritera/Cairn) 深度加固与重构），针对 **Ubuntu 24.04（8 核 / 16 GB RAM / 50 GB 磁盘）**、**长时间无人值守运行**、**一题多 Flag**、**国产大模型白名单网关** 与 **对话审计零泄密** 场景设计。
 
 ---
 
@@ -13,7 +13,7 @@
 - **一题多 Flag 权威门禁（交一个锁一个，杜绝早退）**
   - Worker 每发现一个 Flag 立即通过 `submit-flag` 锁分；宿主机 `race_bridge` 实时拉取官方权威进度 `current_user_solved / total_flag_num`。
   - 若智能体在 `current_user_solved < total_flag_num` 时提前输出 `complete`，总控自动拦截并调用 Cairn `/reopen` 注入 `[MULTI_FLAG_GATE]` 反馈继续深挖剩余 Flag。
-- **零凭据泄露安全隔离（适配 T+N 对话公开）**
+- **零凭据泄露安全隔离（适配公开审计日志）**
   - **模型 API Key 宿主机托管**：`bench/token_proxy.py` 在宿主机从 `.env` 注入真实 Key 并剥离占位符，Worker 容器仅持 `ANTHROPIC_AUTH_TOKEN=proxy-managed-placeholder`。
   - **比赛 `AGENT_TOKEN` 宿主机托管**：`cairn/src/cairn/race/bridge.py` 为每个项目签发一次性项目 Token（在 `create_project` 前原子预注册，消除竞态），真实 `AGENT_TOKEN` 永不进入 Worker 容器。
   - **Cairn Server 管理鉴权**：支持 `CAIRN_ADMIN_TOKEN`（仅 `/health`、`/` 与静态资源免鉴权），防止容器内横向误操作控制面。
@@ -71,21 +71,21 @@ cairn/
   tests/                       109 项自动化单元与端到端契约测试（零真实模型费用）
 bench/
   token_proxy.py               宿主机 Key 托管、Token 记账与国产白名单主备切换代理
-  mock_race_platform.py        1:1 仿真官方 7 接口平台（分阶段放题、3 req/s 限流、多 Flag、scene_status=20 注入）
-  submit_server.py             本地多 Flag 判分与状态持久化服务
+  mock_race_platform.py        1:1 仿真官方 7 接口平台 + MCP + 动态 Docker 靶机 + 实时看板
+  dashboard.html               本地零构建实时观测看板
 worker/
-  Dockerfile.deployed          基于 tools-ready 离线镜像增量叠加竞赛自研脚本
-  deployed-rootfs/             submit-flag、nmap 包装、ics_client.py、pcap_summary.py、hashpath.py、CLAUDE.md、AGENTS.md
+  Dockerfile.deployed          基于 tools-ready 离线镜像增量叠加竞赛脚本并清理遗留杂项
+  Dockerfile.slim              多阶段压平瘦身镜像（剔除云 CLI/.git/截图/缓存/GPU 驱动，释放 ~8+ GB）
+  deployed-rootfs/             submit-flag、nmap 包装、ics_client.py、pcap_summary.py、hashpath.py、CLAUDE.md
 config/
   dispatch.competition.example.yaml  8C16G50G 比赛调度配置示例（零真实 Key）
   proxy.competition.example.yaml     国产旗舰主备路由配置示例（零真实 Key）
-  dispatch.ubuntu.example.yaml       原 Ubuntu 基线配置示例
 deploy/
   preflight.py                 零依赖赛前一键自检脚本（可直接宿主机 python3 运行）
   diagnose.sh                  赛中 5 秒快速诊断脚本
   cairn-race.service           正式赛 systemd 服务单元
-  cairn-race.timer             12/2 08:29 自动拉起开赛定时器
-compose.ubuntu.yaml            四服务宿主网络部署配置（server / proxy / submit / dispatcher）
+  cairn-race.timer             定时自动拉起任务定时器
+compose.ubuntu.yaml            三服务宿主网络部署配置（server / proxy / dispatcher）
 compose.build.yaml             从源码构建 cairn-app 覆盖配置
 compose.dev.yaml               挂载源码热调试覆盖配置
 ```
@@ -129,8 +129,11 @@ sha256sum cairn-worker-tools-ready-20261125.tar.gz
 gunzip -c cairn-worker-tools-ready-20261125.tar.gz | docker load
 # 原 OCI 镜像身份参考：sha256:81e1b018223a72bfa67b51bddf2a0df8126198a3b7530a1b524e651af6a83cf5
 
-# 在 tools-ready 之上增量叠加竞赛脚本、submit-flag、nmap 包装与工控工具
-docker build -f worker/Dockerfile.deployed -t cairn-worker:competition-20261201 .
+# 在 tools-ready 之上增量叠加竞赛脚本、submit-flag、nmap 包装与工控工具（共享底层，秒建）
+docker build -f worker/Dockerfile.deployed -t cairn-worker:competition .
+
+# 或构建压平瘦身版（释放 ~8+ GB 磁盘空间，适合 50 GB 比赛机）
+docker build -f worker/Dockerfile.slim -t cairn-worker:competition-slim .
 ```
 
 ### 3. 配置本机密钥与代理（仅存宿主机，不入库）
@@ -153,15 +156,15 @@ GLM_CODING_API_KEY=<智谱 Coding Plan Key>
 
 同步将同一个 `CAIRN_ADMIN_TOKEN` 写入 `config/dispatch.yaml` 的 `admin_token` 字段。
 
-> **12/1 现场调试网关登记**：在比赛平台「环境配置 -> 网关配置」登记官方白名单 `base_url`（`https://api.moonshot.cn/anthropic`、`https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic`、`https://dashscope.aliyuncs.com/apps/anthropic`、`https://open.bigmodel.cn/api/anthropic`），将平台生成的本队专属代理地址替换进 `config/proxy.yaml` 的对应 `url` 字段即可（Anthropic 协议不要省略 `/v1`，客户端会自动拼接 `/v1/messages`）。
+> **现场调试网关登记**：在平台「环境配置 -> 网关配置」登记官方白名单 `base_url`（`https://api.moonshot.cn/anthropic`、`https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic`、`https://dashscope.aliyuncs.com/apps/anthropic`、`https://open.bigmodel.cn/api/anthropic`），将平台生成的专属代理地址替换进 `config/proxy.yaml` 的对应 `url` 字段即可（Anthropic 协议不要省略 `/v1`，客户端会自动拼接 `/v1/messages`）。
 
 ### 4. 构建应用镜像并启动基础服务
 
 ```bash
 docker build -t cairn-app:ubuntu-baseline-dev .
 docker tag cairn-app:ubuntu-baseline-dev cairn-app:migration-20261119
-# 仅启动 server / proxy / submit（按需再启动 dispatcher，避免闲置消耗模型额度）
-docker compose -f compose.ubuntu.yaml up -d server proxy submit
+# 仅启动 server / proxy（按需再启动 dispatcher，避免闲置消耗模型额度）
+docker compose -f compose.ubuntu.yaml up -d server proxy
 ```
 
 ### 5. 赛前一键自检与 `08:30` 自动开赛
@@ -178,12 +181,12 @@ CAIRN_ADMIN_TOKEN=<同 .env>
 
 ```bash
 python3 deploy/preflight.py \
-  --worker-image cairn-worker:competition-20261201 \
+  --worker-image cairn-worker:competition \
   --race-base-url "$RACE_BASE_URL" \
   --agent-token "$RACE_AGENT_TOKEN"
 ```
 
-确认输出 `PREFLIGHT RESULT: READY` 后，启用 12/2 `08:29` 自动拉起定时器：
+确认输出 `PREFLIGHT RESULT: READY` 后，按实际开赛时间修改 `deploy/cairn-race.timer` 与 `config/race.env` 中的 `RACE_START_AT` / `RACE_END_AT`，启用自动拉起定时器：
 
 ```bash
 sudo cp deploy/cairn-race.service deploy/cairn-race.timer /etc/systemd/system/
@@ -202,12 +205,12 @@ bash deploy/diagnose.sh
 
 ## 本地开发与零费用验证
 
-### 运行全量单元测试（109 项，零模型消耗）
+### 运行全量单元测试（零模型消耗）
 
 ```bash
-docker compose -f compose.ubuntu.yaml -f compose.build.yaml -f compose.dev.yaml \
-  run --rm --no-deps --init server \
-  /cairn/.venv/bin/python -m pytest /cairn/tests -q -p no:cacheprovider
+docker run --rm --init -v "$(pwd):/workspace" -w /workspace \
+  -e PYTHONPATH=/workspace/cairn/src cairn-app:ubuntu-baseline-dev \
+  /cairn/.venv/bin/python -m pytest /workspace/cairn/tests -q -p no:cacheprovider
 ```
 
 或在宿主机使用 `uv` 运行：
@@ -243,7 +246,7 @@ docker compose -f compose.ubuntu.yaml -f compose.build.yaml -f compose.dev.yaml 
 | --- | --- |
 | 初始 Ubuntu 基线提交 | `ac9ca121de880fefb333c2d9b61233a6747669d7` |
 | 基础离线 Worker 镜像 | `cairn-worker:tools-ready-20261125` |
-| 竞赛增量 Worker 镜像 | `cairn-worker:competition-20261201` (`worker/Dockerfile.deployed`) |
+| 增量 Worker 镜像 | `cairn-worker:competition` (`worker/Dockerfile.deployed`) |
 | 协作规范 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 源自 [oritera/Cairn](https://github.com/oritera/Cairn)，保留原始 [LICENSE](LICENSE)（AGPL-3.0）与 [上游 README](README.upstream.md)。镜像内第三方安全工具各自适用其上游许可证。

@@ -7,8 +7,6 @@ services:
       - ./cairn/tests:/cairn/tests:ro
   proxy:
     container_name: cairn-dev-proxy
-  submit:
-    container_name: cairn-dev-submit
   dispatcher:
     container_name: cairn-dev-dispatcher
     volumes:

@@ -155,6 +155,7 @@ class ContainerConfig(BaseModel):
     network_mode: str
     completed_action: CompletedAction
     cap_add: list[str] = Field(default_factory=list)
+    volumes: list[str] = Field(default_factory=list)
     init: bool = True
     mem_limit: str | None = None
     cpu_limit: float | None = Field(default=None, gt=0)
